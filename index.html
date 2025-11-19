@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BSJ_QI - Learning Management System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <div class="container header-content">
+            <a href="#" class="logo">BSJ_QI<span>LMS</span></a>
+            <nav>
+    <ul>
+        <li><a href="#" class="nav-link" data-target="home">Home</a></li>
+        <li><a href="#" class="nav-link" data-target="courses">Courses</a></li>
+        <li><a href="#" class="nav-link" data-target="login">Login</a></li>
+        <li><a href="#" class="nav-link" data-target="register">Register</a></li>
+    </ul>
+</nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Home Section -->
+        <section id="home" class="section active">
+            <h1>Welcome to Bureau of Standards Jamaica, Quality Institute Learning Management System</h1>
+            <p>Your gateway to quality education. Browse our courses, register, and start learning today!</p>
+            
+            <div class="course-grid">
+                <div class="course-card">
+                    <div class="course-image">ISO 9001:2015</div>
+                    <div class="course-content">
+                        <h3 class="course-title">ISO 9001:2015 Module 1</h3>
+                        <p class="course-description">Understanding the Basics of ISO Quality Management System (QMS).</p>
+                        <div class="course-price">JMD$30,000.00</div>
+                        <button class="enroll-btn" data-course="CS101">Enroll Now</button>
+                    </div>
+                </div>
+                
+                <div class="course-card">
+                    <div class="course-image">Data Science</div>
+                    <div class="course-content">
+                        <h3 class="course-title">PECB Level 27001</h3>
+                        <p class="course-description">Master Python, statistics, and machine learning concepts.</p>
+                        <div class="course-price">JMD$60,000.00</div>
+                        <button class="enroll-btn" data-course="CS201">Enroll Now</button>
+                    </div>
+                </div>
+                
+                <div class="course-card">
+                    <div class="course-image">Health-and-Safety</div>
+                    <div class="course-content">
+                        <h3 class="course-title">Risk Management</h3>
+                        <p class="course-description">Learn basic to identifing risks in your envirnoment.</p>
+                        <div class="course-price">JMD$100,000.00</div>
+                        <button class="enroll-btn" data-course="CS301">Enroll Now</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Registration Section -->
+        <section id="register" class="section">
+            <h2 class="section-title">Student Registration</h2>
+            <form id="registration-form">
+                <div class="form-group">
+                    <label for="fullname">Full Name</label>
+                    <input type="text" id="fullname" name="fullname" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="confirm-password">Confirm Password</label>
+                    <input type="password" id="confirm-password" name="confirm-password" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="phone">Phone Number</label>
+                    <input type="tel" id="phone" name="phone">
+                </div>
+                
+                <button type="submit">Register</button>
+            </form>
+        </section>
+
+        <!-- Course Selection Section -->
+        <section id="courses" class="section">
+            <h2 class="section-title">Available Courses</h2>
+            <div class="course-grid">
+                <!-- Courses will be populated by JavaScript -->
+            </div>
+        </section>
+
+        <!-- Payment Section -->
+        <section id="payment" class="section">
+            <h2 class="section-title">Complete Your Enrollment</h2>
+            <div id="payment-summary">
+                <!-- Payment summary will be populated by JavaScript -->
+            </div>
+            
+            <h3>Select Payment Method</h3>
+            <div class="payment-methods">
+                <div class="payment-method" data-method="credit-card">
+                    <h4>Credit Card</h4>
+                </div>
+                <div class="payment-method" data-method="paypal">
+                    <h4>PayPal</h4>
+                </div>
+                <div class="payment-method" data-method="bank-transfer">
+                    <h4>Bank Transfer</h4>
+                </div>
+            </div>
+            
+            <form id="payment-form">
+                <div class="form-group">
+                    <label for="card-number">Card Number</label>
+                    <input type="text" id="card-number" name="card-number" placeholder="1234 5678 9012 3456">
+                </div>
+                
+                <div class="form-group">
+                    <label for="card-name">Name on Card</label>
+                    <input type="text" id="card-name" name="card-name">
+                </div>
+                
+                <div class="form-group" style="display: flex; gap: 15px;">
+                    <div style="flex: 1;">
+                        <label for="expiry-date">Expiry Date</label>
+                        <input type="text" id="expiry-date" name="expiry-date" placeholder="MM/YY">
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="cvv">CVV</label>
+                        <input type="text" id="cvv" name="cvv" placeholder="123">
+                    </div>
+                </div>
+                
+                <button type="submit">Complete Payment</button>
+            </form>
+        </section>
+
+        <!-- Login Section -->
+        <section id="login" class="section">
+            <h2 class="section-title">Student Login</h2>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-email">Email Address</label>
+                    <input type="email" id="login-email" name="email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" name="password" required>
+                </div>
+                
+                <button type="submit">Login</button>
+            </form>
+        </section>
+
+        <!-- Dashboard Section -->
+        <section id="dashboard" class="section">
+            <h2 class="section-title">Student Dashboard</h2>
+            <div class="dashboard-grid">
+                <div class="sidebar">
+                    <ul class="sidebar-menu">
+                        <li><a href="#" class="dashboard-nav active" data-content="my-courses">My Courses</a></li>
+                        <li><a href="#" class="dashboard-nav" data-content="profile">Profile</a></li>
+                        <li><a href="#" class="dashboard-nav" data-content="progress">Progress</a></li>
+                        <li><a href="#" class="dashboard-nav" data-content="certificates">Certificates</a></li>
+                    </ul>
+                </div>
+                
+                <div class="dashboard-content">
+                    <div id="dashboard-my-courses" class="dashboard-section">
+                        <h3>My Enrolled Courses</h3>
+                        <div class="course-list">
+                            <!-- Enrolled courses will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div id="dashboard-profile" class="dashboard-section" style="display: none;">
+                        <h3>Student Profile</h3>
+                        <div id="profile-details">
+                            <!-- Profile details will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div id="dashboard-progress" class="dashboard-section" style="display: none;">
+                        <h3>Learning Progress</h3>
+                        <div id="progress-details">
+                            <!-- Progress details will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div id="dashboard-certificates" class="dashboard-section" style="display: none;">
+                        <h3>Certificates</h3>
+                        <p>No certificates available yet. Complete a course to earn your certificate!</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 BSJ_QI - LearnHub Learning Management System. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

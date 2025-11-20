@@ -1,47 +1,31 @@
 const express = require('express');
-const sql = require('mssql');
 const cors = require('cors');
 const path = require('path');
+const db = require('./db');
+const sql = db.sql;
+require('dotenv').config();
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('.'));
 
-// SQL Server Database Configuration - UPDATE WITH YOUR CREDENTIALS
-const dbConfig = {
-    server: 'DESKTOP-P6M5VIB\\SQLEXPRESS', // Your SQL Server instance
-    database: 'BSJQI_LMS',                 // Your database name
-    user: 'sa',                           // SQL Server username
-    password: 'SpecialProject2025',       // SQL Server password - UPDATE THIS!
-    options: {
-        trustServerCertificate: true,     // For local development
-        encrypt: false,                   // For local development
-        enableArithAbort: true
-    },
-    pool: {
-        max: 10,
-        min: 0,
-        idleTimeoutMillis: 30000
-    }
-};
-
 // Test database connection
 async function testConnection() {
     try {
-        await sql.connect(dbConfig);
-        console.log(' Connected to SQL Server successfully!');
-        
-        // Test basic query
-        const result = await sql.query`SELECT DB_NAME() as dbname, @@VERSION as version`;
+        const pool = db.getPool();
+        if (!pool) {
+            throw new Error('DB pool not initialized');
+        }
+        const result = await pool.request().query('SELECT DB_NAME() as dbname, @@VERSION as version');
+        console.log('Connected to SQL Server successfully!');
         console.log('Database:', result.recordset[0].dbname);
-        
         return true;
     } catch (err) {
-        console.error(' SQL Server connection failed:', err.message);
+        console.error('SQL Server connection failed:', err.message || err);
         return false;
     }
 }
@@ -55,18 +39,18 @@ app.get('/api/test', async (req, res) => {
         if (connected) {
             res.json({ 
                 success: true, 
-                message: 'Connected to SQL Server BSJQI_LMS database!' 
+                message: `Connected to SQL Server` 
             });
         } else {
-            res.json({ 
+            res.status(500).json({ 
                 success: false, 
                 message: 'Database connection failed' 
             });
         }
     } catch (error) {
-        res.json({ 
+        res.status(500).json({ 
             success: false, 
-            message: 'Error: ' + error.message 
+            message: 'Error: ' + (error.message || error)
         });
     }
 });
@@ -74,24 +58,30 @@ app.get('/api/test', async (req, res) => {
 // Get all courses from database
 app.get('/api/courses', async (req, res) => {
     try {
-        await sql.connect(dbConfig);
-        const result = await sql.query`
-            SELECT CourseCode, Title, Description, Price, DurationWeeks, InstructorName, Category 
-            FROM Courses 
-            WHERE IsActive = 1 
-            ORDER BY CourseCode
-        `;
-        
-        res.json({ 
-            success: true, 
-            courses: result.recordset 
-        });
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+        const result = await pool.request().query(
+            `SELECT CourseCode, Title, Description, Price, DurationWeeks, InstructorName, Category
+             FROM Courses
+             WHERE IsActive = 1
+             ORDER BY CourseCode`
+        );
+
+        // Map DB fields to camelCase for consistency
+        const courses = result.recordset.map(r => ({
+            CourseCode: r.CourseCode,
+            Title: r.Title,
+            Description: r.Description,
+            Price: r.Price,
+            DurationWeeks: r.DurationWeeks,
+            InstructorName: r.InstructorName,
+            Category: r.Category
+        }));
+
+        res.json({ success: true, courses });
     } catch (error) {
-        console.error('Courses error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: error.message 
-        });
+        console.error('Courses error:', error.message || error);
+        res.status(500).json({ success: false, message: error.message || error });
     }
 });
 
@@ -102,8 +92,9 @@ app.post('/api/register', async (req, res) => {
         
         console.log('Registration attempt for:', email);
         
-        await sql.connect(dbConfig);
-        const request = new sql.Request();
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+        const request = pool.request();
         
         // Check if email already exists
         const emailCheck = await request
@@ -152,8 +143,9 @@ app.post('/api/login', async (req, res) => {
         
         console.log('Login attempt for:', email);
         
-        await sql.connect(dbConfig);
-        const request = new sql.Request();
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+        const request = pool.request();
         
         const result = await request
             .input('Email', sql.NVarChar(255), email)
@@ -166,18 +158,19 @@ app.post('/api/login', async (req, res) => {
         
         if (result.recordset.length > 0) {
             // Update last login time
-            await request
+            await pool.request()
                 .input('UserID', sql.Int, result.recordset[0].UserID)
                 .query('UPDATE Users SET LastLogin = GETDATE() WHERE UserID = @UserID');
-            
+
+            const u = result.recordset[0];
             res.json({ 
                 success: true, 
                 user: {
-                    UserID: result.recordset[0].UserID,
-                    FullName: result.recordset[0].FirstName + ' ' + result.recordset[0].LastName,
-                    Email: result.recordset[0].Email,
-                    PhoneNumber: result.recordset[0].PhoneNumber,
-                    RegistrationDate: result.recordset[0].RegistrationDate
+                    userId: u.UserID,
+                    fullName: (u.FirstName || '') + ' ' + (u.LastName || ''),
+                    email: u.Email,
+                    phoneNumber: u.PhoneNumber,
+                    registrationDate: u.RegistrationDate
                 },
                 message: 'Login successful' 
             });
@@ -200,9 +193,8 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/enroll', async (req, res) => {
     try {
         const { userId, courseCode, paymentMethod } = req.body;
-        
-        await sql.connect(dbConfig);
-        const request = new sql.Request();
+        const pool = await poolPromise;
+        const request = pool.request();
         
         // Get course details
         const courseResult = await request
@@ -233,7 +225,7 @@ app.post('/api/enroll', async (req, res) => {
         }
         
         // Start transaction
-        const transaction = new sql.Transaction();
+        const transaction = new sql.Transaction(pool);
         await transaction.begin();
         
         try {
@@ -288,10 +280,10 @@ app.post('/api/enroll', async (req, res) => {
 app.get('/api/dashboard/:userId', async (req, res) => {
     try {
         const userId = req.params.userId;
-        
-        await sql.connect(dbConfig);
-        const request = new sql.Request();
-        
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+        const request = pool.request();
+
         const result = await request
             .input('UserID', sql.Int, userId)
             .query(`
@@ -311,11 +303,20 @@ app.get('/api/dashboard/:userId', async (req, res) => {
                 WHERE ce.UserID = @UserID
                 ORDER BY ce.EnrollmentDate DESC
             `);
-        
-        res.json({ 
-            success: true, 
-            enrollments: result.recordset 
-        });
+
+        const enrollments = result.recordset.map(r => ({
+            enrollmentId: r.EnrollmentID,
+            courseCode: r.CourseCode,
+            title: r.Title,
+            instructorName: r.InstructorName,
+            enrollmentDate: r.EnrollmentDate,
+            progressPercentage: r.ProgressPercentage,
+            isCompleted: !!r.IsCompleted,
+            paymentDate: r.PaymentDate,
+            amountPaid: r.AmountPaid
+        }));
+
+        res.json({ success: true, enrollments });
         
     } catch (error) {
         console.error('Dashboard error:', error);
@@ -333,12 +334,20 @@ app.get('/', (req, res) => {
 
 // Start server
 app.listen(port, async () => {
-    console.log(`🚀 Server running at http://localhost:${port}`);
-    console.log(`📊 Test connection: http://localhost:${port}/api/test`);
-    console.log(`🌐 Website: http://localhost:${port}`);
-    console.log(`🗄️ SQL Server: ${dbConfig.server}`);
-    console.log(`📁 Database: ${dbConfig.database}`);
-    
-    // Test database connection on startup
+    console.log(` Server running at http://127.0.0.1:${port}`);
+    console.log(` Test connection: http://localhost:${port}/api/test`);
+    console.log(` Website: http://127.0.0.1:${port}`);
+    console.log(` SQL Server: ${db.dbConfig ? db.dbConfig.server : 'unknown'}`);
+    console.log(` Database: ${db.dbConfig ? db.dbConfig.database : 'unknown'}`);
+
+    // Initialize DB pool but don't crash server if DB is unavailable
+    const pool = await db.initDb();
+    if (!pool) {
+        console.warn('Warning: Database pool not initialized. API DB routes will fail until DB is reachable.');
+    } else {
+        console.log('Database pool initialized.');
+    }
+
+    // Test database connection on startup (will return false if pool not initialized)
     await testConnection();
 });

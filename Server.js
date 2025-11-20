@@ -97,9 +97,9 @@ app.post('/api/register', async (req, res) => {
         const request = pool.request();
         
         // Check if email already exists
-        const emailCheck = await request
-            .input('Email', sql.NVarChar(255), email)
-            .query('SELECT UserID FROM Users WHERE Email = @Email');
+            const emailCheck = await request
+                .input('Email', sql.NVarChar(255), email)
+                .query('SELECT StudentID AS UserID FROM Students WHERE Email = @Email');
         
         if (emailCheck.recordset.length > 0) {
             return res.status(400).json({ 
@@ -109,17 +109,17 @@ app.post('/api/register', async (req, res) => {
         }
         
         // Insert new user
-        const insertResult = await request
-            .input('FirstName', sql.NVarChar(100), firstName)
-            .input('LastName', sql.NVarChar(100), lastName)
-            .input('Email', sql.NVarChar(255), email)
-            .input('PasswordHash', sql.NVarChar(255), password)
-            .input('PhoneNumber', sql.NVarChar(20), phoneNumber || null)
-            .query(`
-                INSERT INTO Users (FirstName, LastName, Email, PasswordHash, PhoneNumber) 
-                OUTPUT INSERTED.UserID
-                VALUES (@FirstName, @LastName, @Email, @PasswordHash, @PhoneNumber)
-            `);
+            const insertResult = await request
+                .input('FirstName', sql.NVarChar(100), firstName)
+                .input('LastName', sql.NVarChar(100), lastName)
+                .input('Email', sql.NVarChar(255), email)
+                .input('PasswordHash', sql.NVarChar(255), password)
+                .input('PhoneNumber', sql.NVarChar(20), phoneNumber || null)
+                .query(`
+                    INSERT INTO Students (FirstName, LastName, Email, PasswordHash, PhoneNumber) 
+                    OUTPUT INSERTED.StudentID AS UserID
+                    VALUES (@FirstName, @LastName, @Email, @PasswordHash, @PhoneNumber)
+                `);
         
         res.json({ 
             success: true, 
@@ -137,55 +137,73 @@ app.post('/api/register', async (req, res) => {
 });
 
 // User login
+const bcrypt = require('bcryptjs');
+
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        
+
         console.log('Login attempt for:', email);
-        
+
         const pool = db.getPool();
         if (!pool) throw new Error('DB pool not initialized');
         const request = pool.request();
-        
+
+        // Fetch student by email (do not compare password in SQL so we can handle hashing correctly)
         const result = await request
             .input('Email', sql.NVarChar(255), email)
-            .input('PasswordHash', sql.NVarChar(255), password)
             .query(`
-                SELECT UserID, FirstName, LastName, Email, PhoneNumber, RegistrationDate 
-                FROM Users 
-                WHERE Email = @Email AND PasswordHash = @PasswordHash AND IsActive = 1
+                SELECT StudentID AS UserID, FirstName, LastName, Email, PhoneNumber, RegistrationDate, PasswordHash, IsActive
+                FROM dbo.Students
+                WHERE Email = @Email
             `);
-        
-        if (result.recordset.length > 0) {
-            // Update last login time
-            await pool.request()
-                .input('UserID', sql.Int, result.recordset[0].UserID)
-                .query('UPDATE Users SET LastLogin = GETDATE() WHERE UserID = @UserID');
 
-            const u = result.recordset[0];
-            res.json({ 
-                success: true, 
-                user: {
-                    userId: u.UserID,
-                    fullName: (u.FirstName || '') + ' ' + (u.LastName || ''),
-                    email: u.Email,
-                    phoneNumber: u.PhoneNumber,
-                    registrationDate: u.RegistrationDate
-                },
-                message: 'Login successful' 
-            });
-        } else {
-            res.status(401).json({ 
-                success: false, 
-                message: 'Invalid email or password' 
-            });
+        if (!result.recordset || result.recordset.length === 0) {
+            return res.status(401).json({ success: false, message: 'Invalid email or password' });
         }
-    } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: error.message 
+
+        const u = result.recordset[0];
+
+        if (!u.IsActive) {
+            return res.status(403).json({ success: false, message: 'Account inactive' });
+        }
+
+        const storedHash = u.PasswordHash || '';
+
+        let passwordMatches = false;
+
+        // If storedHash looks like a bcrypt hash, use bcrypt compare
+        if (typeof storedHash === 'string' && storedHash.startsWith('$2')) {
+            passwordMatches = await bcrypt.compare(password, storedHash);
+        } else {
+            // Fallback: compare raw values (useful for placeholder/mock hashed values)
+            passwordMatches = (password === storedHash);
+        }
+
+        if (!passwordMatches) {
+            return res.status(401).json({ success: false, message: 'Invalid email or password' });
+        }
+
+        // Update last login time
+        await pool.request()
+            .input('UserID', sql.Int, u.UserID)
+            .query('UPDATE dbo.Students SET LastLogin = GETDATE() WHERE StudentID = @UserID');
+
+        res.json({
+            success: true,
+            user: {
+                userId: u.UserID,
+                fullName: (u.FirstName || '') + ' ' + (u.LastName || ''),
+                email: u.Email,
+                phoneNumber: u.PhoneNumber,
+                registrationDate: u.RegistrationDate
+            },
+            message: 'Login successful'
         });
+
+    } catch (error) {
+        console.error('Login error:', error.message || error);
+        res.status(500).json({ success: false, message: error.message || 'Server error' });
     }
 });
 
@@ -193,7 +211,8 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/enroll', async (req, res) => {
     try {
         const { userId, courseCode, paymentMethod } = req.body;
-        const pool = await poolPromise;
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
         const request = pool.request();
         
         // Get course details
@@ -350,4 +369,49 @@ app.listen(port, async () => {
 
     // Test database connection on startup (will return false if pool not initialized)
     await testConnection();
+});
+
+// Debug: return Students table schema (columns and data types)
+app.get('/api/debug/students-schema', async (req, res) => {
+    try {
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+
+        const result = await pool.request().query(`
+            SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Students'
+            ORDER BY ORDINAL_POSITION
+        `);
+
+        res.json({ success: true, columns: result.recordset });
+    } catch (err) {
+        console.error('Debug schema error:', err.message || err);
+        res.status(500).json({ success: false, message: err.message || err });
+    }
+});
+
+// Debug: return a single student row by email (includes PasswordHash) - remove after debugging
+app.get('/api/debug/student', async (req, res) => {
+    try {
+        const email = req.query.email;
+        if (!email) return res.status(400).json({ success: false, message: 'email query required' });
+
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+
+        const result = await pool.request()
+            .input('Email', sql.NVarChar(255), email)
+            .query(`SELECT * FROM dbo.Students WHERE Email = @Email`);
+
+        if (!result.recordset || result.recordset.length === 0) {
+            return res.status(404).json({ success: false, message: 'Student not found' });
+        }
+
+        // Return the row (including PasswordHash) for debugging only
+        res.json({ success: true, student: result.recordset[0] });
+    } catch (err) {
+        console.error('Debug student error:', err.message || err);
+        res.status(500).json({ success: false, message: err.message || err });
+    }
 });

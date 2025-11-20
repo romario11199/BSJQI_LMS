@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Edge (localhost:3000)",
+            "request": "launch",
+            "type": "msedge",
+            "url": "http://localhost:3000",
+            "webRoot": "${workspaceFolder}"
+        },
+        {
+            "name": "Attach to Edge",
+            "request": "attach",
+            "type": "msedge",
+            "port": 9222,
+            "webRoot": "${workspaceFolder}"
+        }
+    ]
+}

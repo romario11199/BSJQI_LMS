@@ -205,13 +205,19 @@ function renderCourses() {
 function handleRegistration(e) {
     e.preventDefault();
     
-    const formData = new FormData(e.target);
-    const userData = {
-        fullname: formData.get('fullname'),
-        email: formData.get('email'),
-        password: formData.get('password'),
-        id: Date.now().toString()
-    };
+  const formData = new FormData(e.target);
+
+const firstName = formData.get('firstname');
+const lastName = formData.get('lastname');
+
+const userData = {
+    firstName: firstName,
+    lastName: lastName,
+    fullName: `${firstName} ${lastName}`,
+    email: formData.get('email'),
+    password: formData.get('password'),
+    id: Date.now().toString()
+ };
     
     // Check if user already exists
     const existingUser = users.find(user => user.email === userData.email);
@@ -250,7 +256,7 @@ function handleLogin(e) {
         currentUser = user;
         localStorage.setItem('lmsCurrentUser', JSON.stringify(currentUser));
         
-        alert(`Welcome back, ${user.fullname}!`);
+        alert(`Welcome back, ${user.fullName}!`);
         showSection('dashboard');
         updateDashboard();
         loginForm.reset();
@@ -327,7 +333,7 @@ function updateDashboard() {
     
     // Update profile
     document.getElementById('profile-details').innerHTML = `
-        <p><strong>Name:</strong> ${currentUser.fullname}</p>
+        <p><strong>Name:</strong> ${currentUser.fullName}</p>
         <p><strong>Email:</strong> ${currentUser.email}</p>
     `;
     
@@ -506,8 +512,8 @@ async function handleRegistration(e) {
                 'Content-Type': 'application/json',
             },
                 body: JSON.stringify({
-                firstName: formData.get('firstName') || formData.get('fullname')?.split(' ')[0],
-                lastName: formData.get('lastName') || formData.get('fullname')?.split(' ')[1] || '',
+                firstName: formData.get('firstName') || formData.get('fullName')?.split(' ')[0],
+                lastName: formData.get('lastName') || formData.get('fullName')?.split(' ')[1] || '',
                 email: formData.get('email'),
                 password: formData.get('password')
             })

@@ -89,52 +89,51 @@ app.get('/api/courses', async (req, res) => {
 app.post('/api/register', async (req, res) => {
     try {
         const { firstName, lastName, email, password } = req.body;
-        
-        console.log('Registration attempt for:', email);
-        
+
         const pool = db.getPool();
         if (!pool) throw new Error('DB pool not initialized');
-        const request = pool.request();
-        
-        // Check if email already exists
-            const emailCheck = await request
-                .input('Email', sql.NVarChar(255), email)
-                .query('SELECT StudentID AS UserID FROM Students WHERE Email = @Email');
-        
+
+        // STEP 1 — fresh request
+        const emailCheckReq = pool.request();
+        const emailCheck = await emailCheckReq
+            .input('Email', sql.NVarChar(255), email)
+            .query(`SELECT StudentID FROM Students WHERE Email = @Email`);
+
         if (emailCheck.recordset.length > 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Email already exists' 
+            return res.status(400).json({
+                success: false,
+                message: 'Email already exists'
             });
         }
-        
-        // Insert new user
-            const insertResult = await request
-                .input('FirstName', sql.NVarChar(100), firstName)
-                .input('LastName', sql.NVarChar(100), lastName)
-                .input('Email', sql.NVarChar(255), email)
-                .input('PasswordHash', sql.NVarChar(255), password)
-                // Phone number removed from registration per privacy request
-                .query(`
-                    INSERT INTO Students (FirstName, LastName, Email, PasswordHash) 
-                    OUTPUT INSERTED.StudentID AS UserID
-                    VALUES (@FirstName, @LastName, @Email, @PasswordHash)
-                `);
-        
-        res.json({ 
-            success: true, 
+
+        // STEP 2 — fresh request
+        const insertReq = pool.request();
+        const insertResult = await insertReq
+            .input('FirstName', sql.NVarChar(100), firstName)
+            .input('LastName', sql.NVarChar(100), lastName)
+            .input('Email', sql.NVarChar(255), email)
+            .input('PasswordHash', sql.NVarChar(255), password)
+            .query(`
+                INSERT INTO Students (FirstName, LastName, Email, PasswordHash)
+                OUTPUT INSERTED.StudentID AS UserID
+                VALUES (@FirstName, @LastName, @Email, @PasswordHash)
+            `);
+
+        res.json({
+            success: true,
             userId: insertResult.recordset[0].UserID,
-            message: 'Registration successful' 
+            message: 'Registration successful'
         });
-        
+
     } catch (error) {
         console.error('Registration error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: error.message 
+        res.status(500).json({
+            success: false,
+            message: error.message
         });
     }
 });
+
 
 // User login
 const bcrypt = require('bcryptjs');
@@ -386,31 +385,6 @@ app.get('/api/debug/students-schema', async (req, res) => {
         res.json({ success: true, columns: result.recordset });
     } catch (err) {
         console.error('Debug schema error:', err.message || err);
-        res.status(500).json({ success: false, message: err.message || err });
-    }
-});
-
-// Debug: return a single student row by email (includes PasswordHash) - remove after debugging
-app.get('/api/debug/student', async (req, res) => {
-    try {
-        const email = req.query.email;
-        if (!email) return res.status(400).json({ success: false, message: 'email query required' });
-
-        const pool = db.getPool();
-        if (!pool) throw new Error('DB pool not initialized');
-
-        const result = await pool.request()
-            .input('Email', sql.NVarChar(255), email)
-            .query(`SELECT * FROM dbo.Students WHERE Email = @Email`);
-
-        if (!result.recordset || result.recordset.length === 0) {
-            return res.status(404).json({ success: false, message: 'Student not found' });
-        }
-
-        // Return the row (including PasswordHash) for debugging only
-        res.json({ success: true, student: result.recordset[0] });
-    } catch (err) {
-        console.error('Debug student error:', err.message || err);
         res.status(500).json({ success: false, message: err.message || err });
     }
 });

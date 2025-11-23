@@ -210,7 +210,6 @@ function handleRegistration(e) {
         fullname: formData.get('fullname'),
         email: formData.get('email'),
         password: formData.get('password'),
-        phone: formData.get('phone'),
         id: Date.now().toString()
     };
     
@@ -330,7 +329,6 @@ function updateDashboard() {
     document.getElementById('profile-details').innerHTML = `
         <p><strong>Name:</strong> ${currentUser.fullname}</p>
         <p><strong>Email:</strong> ${currentUser.email}</p>
-        <p><strong>Phone:</strong> ${currentUser.phone || 'Not provided'}</p>
     `;
     
     // Update enrolled courses
@@ -415,7 +413,7 @@ document.addEventListener('DOMContentLoaded', init);
 //----------------------------------------------------------------
 
 // API Base URL
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_BASE_URL = 'http://localhost:5500/api';
 
 // Test database connection
 async function testConnection() {
@@ -507,12 +505,11 @@ async function handleRegistration(e) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
+                body: JSON.stringify({
                 firstName: formData.get('firstName') || formData.get('fullname')?.split(' ')[0],
                 lastName: formData.get('lastName') || formData.get('fullname')?.split(' ')[1] || '',
                 email: formData.get('email'),
-                password: formData.get('password'),
-                phoneNumber: formData.get('phone')
+                password: formData.get('password')
             })
         });
         

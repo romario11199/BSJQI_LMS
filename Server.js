@@ -6,7 +6,7 @@ const sql = db.sql;
 require('dotenv').config();
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5500;
 
 // Middleware
 app.use(cors());
@@ -88,7 +88,7 @@ app.get('/api/courses', async (req, res) => {
 // User registration
 app.post('/api/register', async (req, res) => {
     try {
-        const { firstName, lastName, email, password, phoneNumber } = req.body;
+        const { firstName, lastName, email, password } = req.body;
         
         console.log('Registration attempt for:', email);
         
@@ -114,11 +114,11 @@ app.post('/api/register', async (req, res) => {
                 .input('LastName', sql.NVarChar(100), lastName)
                 .input('Email', sql.NVarChar(255), email)
                 .input('PasswordHash', sql.NVarChar(255), password)
-                .input('PhoneNumber', sql.NVarChar(20), phoneNumber || null)
+                // Phone number removed from registration per privacy request
                 .query(`
-                    INSERT INTO Students (FirstName, LastName, Email, PasswordHash, PhoneNumber) 
+                    INSERT INTO Students (FirstName, LastName, Email, PasswordHash) 
                     OUTPUT INSERTED.StudentID AS UserID
-                    VALUES (@FirstName, @LastName, @Email, @PasswordHash, @PhoneNumber)
+                    VALUES (@FirstName, @LastName, @Email, @PasswordHash)
                 `);
         
         res.json({ 
@@ -153,7 +153,7 @@ app.post('/api/login', async (req, res) => {
         const result = await request
             .input('Email', sql.NVarChar(255), email)
             .query(`
-                SELECT StudentID AS UserID, FirstName, LastName, Email, PhoneNumber, RegistrationDate, PasswordHash, IsActive
+                SELECT StudentID AS UserID, FirstName, LastName, Email, RegistrationDate, PasswordHash, IsActive
                 FROM dbo.Students
                 WHERE Email = @Email
             `);
@@ -191,11 +191,10 @@ app.post('/api/login', async (req, res) => {
 
         res.json({
             success: true,
-            user: {
+                user: {
                 userId: u.UserID,
                 fullName: (u.FirstName || '') + ' ' + (u.LastName || ''),
                 email: u.Email,
-                phoneNumber: u.PhoneNumber,
                 registrationDate: u.RegistrationDate
             },
             message: 'Login successful'

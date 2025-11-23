@@ -31,10 +31,10 @@ body {
 
 /* Header Styles */
 header {
-    background-color: var(--secondary);
+    background-color: purple;
     color: white;
     padding: 15px 0;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 5px rgba(216, 7, 239, 0.959);
 }
 
 .header-content {
@@ -43,11 +43,34 @@ header {
     align-items: center;
 }
 
-.logo {
-    font-size: 24px;
-    font-weight: bold;
-    color: white;
-    text-decoration: none;
+.header-content {
+  display: flex;
+  align-items: center;   /* vertically centers logo and nav */
+  justify-content: space-between; /* space between logo and nav */
+  padding: 10px 20px;
+}
+
+.logo img {
+  height: 60px; /* adjust as needed */
+  width: auto;
+}
+
+.nav-links {
+  list-style: none;
+  display: flex;
+  gap: 20px; /* space between links */
+  margin: 0;
+  padding: 0;
+}
+
+.nav-links li a {
+  text-decoration: none;
+  color: #fff; /* link color */
+  font-weight: bold;
+}
+
+.nav-links li a:hover {
+  color: #f39c12; /* hover color */
 }
 
 .logo span {

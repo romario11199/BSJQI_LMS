@@ -85,7 +85,7 @@ app.get('/api/courses', async (req, res) => {
     }
 });
 
-// User registration
+// Student registration
 app.post('/api/register', async (req, res) => {
     try {
         const { firstName, lastName, email, password } = req.body;
@@ -115,13 +115,13 @@ app.post('/api/register', async (req, res) => {
             .input('PasswordHash', sql.NVarChar(255), password)
             .query(`
                 INSERT INTO Students (FirstName, LastName, Email, PasswordHash)
-                OUTPUT INSERTED.StudentID AS UserID
+                OUTPUT INSERTED.StudentID AS StudentID
                 VALUES (@FirstName, @LastName, @Email, @PasswordHash)
             `);
 
         res.json({
             success: true,
-            userId: insertResult.recordset[0].UserID,
+            StudentID: insertResult.recordset[0].StudentID,
             message: 'Registration successful'
         });
 
@@ -135,7 +135,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 
-// User login
+// Student login
 const bcrypt = require('bcryptjs');
 
 app.post('/api/login', async (req, res) => {
@@ -152,7 +152,7 @@ app.post('/api/login', async (req, res) => {
         const result = await request
             .input('Email', sql.NVarChar(255), email)
             .query(`
-                SELECT StudentID AS UserID, FirstName, LastName, Email, RegistrationDate, PasswordHash, IsActive
+                SELECT StudentID AS StudentID, FirstName, LastName, Email, RegistrationDate, PasswordHash, IsActive
                 FROM dbo.Students
                 WHERE Email = @Email
             `);
@@ -185,13 +185,13 @@ app.post('/api/login', async (req, res) => {
 
         // Update last login time
         await pool.request()
-            .input('UserID', sql.Int, u.UserID)
-            .query('UPDATE dbo.Students SET LastLogin = GETDATE() WHERE StudentID = @UserID');
+            .input('StudentID', sql.Int, u.StudentID)
+            .query('UPDATE dbo.Students SET LastLogin = GETDATE() WHERE StudentID = @StudentID');
 
         res.json({
             success: true,
-                user: {
-                userId: u.UserID,
+                Student: {
+                StudentID: u.StudentID,
                 fullName: (u.FirstName || '') + ' ' + (u.LastName || ''),
                 email: u.Email,
                 registrationDate: u.RegistrationDate
@@ -208,7 +208,7 @@ app.post('/api/login', async (req, res) => {
 // Enroll in course
 app.post('/api/enroll', async (req, res) => {
     try {
-        const { userId, courseCode, paymentMethod } = req.body;
+        const { StudentID, courseCode, paymentMethod } = req.body;
         const pool = db.getPool();
         if (!pool) throw new Error('DB pool not initialized');
         const request = pool.request();
@@ -230,14 +230,14 @@ app.post('/api/enroll', async (req, res) => {
         
         // Check if already enrolled
         const enrollmentCheck = await request
-            .input('UserID', sql.Int, userId)
+            .input('StudentID', sql.Int, StudentID)
             .input('CourseID', sql.Int, courseId)
-            .query('SELECT EnrollmentID FROM CourseEnrollments WHERE UserID = @UserID AND CourseID = @CourseID');
+            .query('SELECT EnrollmentID FROM CourseEnrollments WHERE StudentID = @StudentID AND CourseID = @CourseID');
         
         if (enrollmentCheck.recordset.length > 0) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'Already enrolled in this course' 
+                message: 'Already enrolled in this course'
             });
         }
         
@@ -250,13 +250,13 @@ app.post('/api/enroll', async (req, res) => {
             
             // Create enrollment
             const enrollmentResult = await transactionRequest
-                .input('UserID', sql.Int, userId)
+                .input('StudentID', sql.Int, StudentID)
                 .input('CourseID', sql.Int, courseId)
                 .input('AmountPaid', sql.Decimal(10,2), coursePrice)
                 .query(`
-                    INSERT INTO CourseEnrollments (UserID, CourseID, AmountPaid) 
+                    INSERT INTO CourseEnrollments (StudentID, CourseID, AmountPaid) 
                     OUTPUT INSERTED.EnrollmentID
-                    VALUES (@UserID, @CourseID, @AmountPaid)
+                    VALUES (@StudentID, @CourseID, @AmountPaid)
                 `);
             
             const enrollmentId = enrollmentResult.recordset[0].EnrollmentID;
@@ -293,16 +293,16 @@ app.post('/api/enroll', async (req, res) => {
     }
 });
 
-// Get user dashboard data
-app.get('/api/dashboard/:userId', async (req, res) => {
+// Get Student dashboard data - FIXED Student ID REFERENCE
+app.get('/api/dashboard/:StudentID', async (req, res) => {
     try {
-        const userId = req.params.userId;
+        const StudentID = req.params.StudentID;
         const pool = db.getPool();
         if (!pool) throw new Error('DB pool not initialized');
         const request = pool.request();
 
         const result = await request
-            .input('UserID', sql.Int, userId)
+            .input('StudentID', sql.Int, StudentID)
             .query(`
                 SELECT 
                     ce.EnrollmentID,
@@ -317,7 +317,7 @@ app.get('/api/dashboard/:userId', async (req, res) => {
                 FROM CourseEnrollments ce
                 INNER JOIN Courses c ON ce.CourseID = c.CourseID
                 LEFT JOIN Payments p ON ce.EnrollmentID = p.EnrollmentID
-                WHERE ce.UserID = @UserID
+                WHERE ce.StudentID = @StudentID
                 ORDER BY ce.EnrollmentDate DESC
             `);
 

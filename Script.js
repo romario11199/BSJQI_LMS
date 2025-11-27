@@ -474,13 +474,44 @@ async function updateDashboard() {
 }
 
 // Access a course (simulated)
-function accessCourse(courseCode) {
-    alert(`Accessing course: ${courseCode}\n\nThis would open the course content in a real LMS.`);
+async function accessCourse(courseCode) {
+    if (!currentStudent) {
+        alert('Please login to access courses');
+        return;
+    }
     
-    // In a real app, you would:
-    // 1. Update progress in the database
-    // 2. Redirect to course content
-    // 3. Track Student activity
+    try {
+        // Update progress in database
+        const response = await fetch(`${API_BASE_URL}/update-progress`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                StudentID: currentStudent.id,
+                courseCode: courseCode,
+                progressIncrement: 10 // Increment by 10% each time
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            const completionMsg = result.isCompleted 
+                ? '\n\n🎉 Congratulations! You have completed this course!' 
+                : `\n\nProgress updated: ${result.progressPercentage}%`;
+            
+            alert(`Accessing course: ${courseCode}${completionMsg}\n\nThis would open the course content in a real LMS.`);
+            
+            // Refresh dashboard to show updated progress
+            updateDashboard();
+        } else {
+            alert('Error updating progress: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error accessing course:', error);
+        alert(`Accessing course: ${courseCode}\n\nProgress update failed, but course is accessible.`);
+    }
 }
 
 // Logout function

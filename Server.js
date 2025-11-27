@@ -344,6 +344,85 @@ app.get('/api/dashboard/:StudentID', async (req, res) => {
     }
 });
 
+// Update course progress
+app.post('/api/update-progress', async (req, res) => {
+    try {
+        const { StudentID, courseCode, progressIncrement } = req.body;
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+        
+        // Get course ID
+        const courseResult = await pool.request()
+            .input('CourseCode', sql.NVarChar(20), courseCode)
+            .query('SELECT CourseID FROM Courses WHERE CourseCode = @CourseCode');
+        
+        if (courseResult.recordset.length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Course not found' 
+            });
+        }
+        
+        const courseId = courseResult.recordset[0].CourseID;
+        const increment = progressIncrement || 10; // Default 10% increment
+        
+        // Update progress
+        await pool.request()
+            .input('StudentID', sql.Int, StudentID)
+            .input('CourseID', sql.Int, courseId)
+            .input('Increment', sql.Int, increment)
+            .query(`
+                UPDATE CourseEnrollments
+                SET ProgressPercentage = CASE 
+                    WHEN ProgressPercentage + @Increment >= 100 THEN 100
+                    ELSE ProgressPercentage + @Increment
+                END,
+                IsCompleted = CASE 
+                    WHEN ProgressPercentage + @Increment >= 100 THEN 1
+                    ELSE IsCompleted
+                END,
+                CompletionDate = CASE 
+                    WHEN ProgressPercentage + @Increment >= 100 AND CompletionDate IS NULL THEN GETDATE()
+                    ELSE CompletionDate
+                END
+                WHERE StudentID = @StudentID AND CourseID = @CourseID
+            `);
+        
+        // Get updated values
+        const selectResult = await pool.request()
+            .input('StudentID', sql.Int, StudentID)
+            .input('CourseID', sql.Int, courseId)
+            .query(`
+                SELECT ProgressPercentage, IsCompleted
+                FROM CourseEnrollments
+                WHERE StudentID = @StudentID AND CourseID = @CourseID
+            `);
+        
+        if (selectResult.recordset.length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Enrollment not found' 
+            });
+        }
+        
+        const updatedProgress = selectResult.recordset[0];
+        
+        res.json({ 
+            success: true, 
+            progressPercentage: updatedProgress.ProgressPercentage,
+            isCompleted: !!updatedProgress.IsCompleted,
+            message: 'Progress updated successfully' 
+        });
+        
+    } catch (error) {
+        console.error('Update progress error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
+
 // Serve the main HTML file
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));

@@ -241,8 +241,26 @@ async function handleRegistration(e) {
     e.preventDefault();
     
     const formData = new FormData(e.target);
-    const firstName = formData.get('firstname') || formData.get('fullname')?.split(' ')[0];
-    const lastName = formData.get('lastname') || formData.get('fullname')?.split(' ')[1] || '';
+    let firstName, lastName, rawFullName;
+
+    // Prefer dedicated fields if present
+    if (formData.get('firstname')) {
+        firstName = (formData.get('firstname') || '').trim();
+        lastName = (formData.get('lastname') || '').trim();
+    } else {
+        // Fallback to fullName (name attribute is fullName in HTML)
+        rawFullName = (formData.get('fullName') || formData.get('fullname') || '').trim();
+        const parts = rawFullName.split(/\s+/).filter(p => p.length);
+        firstName = parts[0] || '';
+        lastName = parts.slice(1).join(' ');
+    }
+
+    console.log('[Registration] Parsed names:', { firstName, lastName });
+
+    if (!firstName) {
+        alert('Could not detect first name. Please enter a valid name.');
+        return;
+    }
     
     try {
         const response = await fetch(`${API_BASE_URL}/register`, {
@@ -253,6 +271,7 @@ async function handleRegistration(e) {
             body: JSON.stringify({
                 firstName: firstName,
                 lastName: lastName,
+                fullName: rawFullName,
                 email: formData.get('email'),
                 password: formData.get('password')
             })

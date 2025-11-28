@@ -88,7 +88,51 @@ app.get('/api/courses', async (req, res) => {
 // Student registration
 app.post('/api/register', async (req, res) => {
     try {
-        const { firstName, lastName, email, password } = req.body;
+        let { firstName, lastName, email, password, fullName, fullname } = req.body;
+        if (!firstName) {
+            console.log('[Register] firstName missing in body, attempting fallback parse from fullName/fullname');
+        }
+
+        // Log raw body for diagnostics
+        if (req.body) {
+            console.log('[Register] Raw body keys:', Object.keys(req.body));
+            console.log('[Register] Raw body values snapshot:', req.body);
+        }
+
+        // Fallback parsing if firstName not provided
+        if ((!firstName || firstName.trim() === '') && (fullName || fullname)) {
+            const raw = (fullName || fullname || '').trim();
+            const parts = raw.split(/\s+/).filter(p => p.length);
+            firstName = parts[0] || '';
+            lastName = parts.slice(1).join(' ');
+            console.log('[Register] Parsed from fullName:', { raw, firstName, lastName });
+        }
+
+        // Secondary fallback: if still empty but we have any raw full name string, use entire string as firstName
+        if ((!firstName || firstName.trim() === '') && (fullName || fullname)) {
+            firstName = (fullName || fullname).trim();
+            lastName = '';
+            console.log('[Register] Using entire fullName as firstName:', firstName);
+        }
+
+        // Final trimming
+        firstName = (firstName || '').trim();
+        lastName = (lastName || '').trim();
+        email = (email || '').trim();
+        password = (password || '').trim();
+
+        if (!firstName) {
+            console.log('[Register] Still no firstName after fallback. Raw body:', req.body);
+            return res.status(400).json({ success: false, message: 'First name is required.' });
+        }
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'Email is required.' });
+        }
+        if (!password) {
+            return res.status(400).json({ success: false, message: 'Password is required.' });
+        }
+
+        console.log('[Register] Incoming:', { firstName, lastName, email });
 
         const pool = db.getPool();
         if (!pool) throw new Error('DB pool not initialized');

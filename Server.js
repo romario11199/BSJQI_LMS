@@ -137,7 +137,7 @@ app.post('/api/register', async (req, res) => {
         const pool = db.getPool();
         if (!pool) throw new Error('DB pool not initialized');
 
-        // STEP 1 — fresh request
+        // STEP 1 â€” fresh request
         const emailCheckReq = pool.request();
         const emailCheck = await emailCheckReq
             .input('Email', sql.NVarChar(255), email)
@@ -150,7 +150,7 @@ app.post('/api/register', async (req, res) => {
             });
         }
 
-        // STEP 2 — fresh request
+        // STEP 2 â€” fresh request
         const insertReq = pool.request();
         const insertResult = await insertReq
             .input('FirstName', sql.NVarChar(100), firstName)

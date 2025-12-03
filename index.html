@@ -8,17 +8,19 @@
 </head>
 <body>
     <header>
-  <div class="container header-content">
-    <a href="#" class="logo">
-      <img src="images/BSJ Logo.jpg" alt="BSJ_QI LMS Logo"> 
-<nav>
-    <ul class="nav-links">
-        <li><a href="#" class="nav-link" data-target="home">Home</a></li>
-        <li><a href="#" class="nav-link" data-target="register">Register</a></li>
-        <li><a href="#" class="nav-link" data-target="courses">Courses</a></li>
-        <li><a href="#" class="nav-link" data-target="login">Login</a></li>
-    </ulclass>
-</nav>
+        <div class="container header-content">
+            <a href="#" class="logo">
+                <img src="images/BSJ Logo.jpg" alt="BSJ_QI LMS Logo">
+            </a>
+            <nav>
+                <ul class="nav-links">
+                    <li><a href="#" class="nav-link" data-target="home">Home</a></li>
+                    <li><a href="#" class="nav-link" data-target="register">Register</a></li>
+                    <li><a href="#" class="nav-link" data-target="courses">Courses</a></li>
+                    <li><a href="#" class="nav-link" data-target="login"> Student Login</a></li>
+                    <li><a href="#" class="nav-link" data-target="instructor-dashboard">Instructor</a></li>
+                </ul>
+            </nav>
         </div>
     </header>
 
@@ -55,7 +57,7 @@
                         <h3 class="course-title">Risk Management</h3>
                         <p class="course-description">Learn basic to identifing risks in your envirnoment.</p>
                         <div class="course-price">JMD$100,000.00</div>
-                        <button class="enroll-btn" data-course="CS301">Enroll Now</button>
+                        <button class="enroll-btn" data-course="RS301">Enroll Now</button>
                     </div>
                 </div>
             </div>
@@ -85,8 +87,6 @@
                     <input type="password" id="confirm-password" name="confirm-password" required>
                 </div>
                 
-                <!-- Phone number removed per request -->
-                
                 <button type="submit">Register</button>
             </form>
         </section>
@@ -94,7 +94,7 @@
         <!-- Course Selection Section -->
         <section id="courses" class="section">
             <h2 class="section-title">Available Courses</h2>
-            <div class="course-grid">
+            <div class="course-grid" id="courses-grid">
                 <!-- Courses will be populated by JavaScript -->
             </div>
         </section>
@@ -111,11 +111,8 @@
                 <div class="payment-method" data-method="credit-card">
                     <h4>Credit Card</h4>
                 </div>
-                <div class="payment-method" data-method="paypal">
-                    <h4>PayPal</h4>
-                </div>
-                <div class="payment-method" data-method="bank-transfer">
-                    <h4>Bank Transfer</h4>
+                <div class="payment-method" data-method="debit-card">
+                    <h4>Debit Card</h4>
                 </div>
             </div>
             
@@ -163,9 +160,12 @@
             </form>
         </section>
 
-        <!-- Dashboard Section -->
+        <!-- Student Dashboard Section -->
         <section id="dashboard" class="section">
-            <h2 class="section-title">Student Dashboard</h2>
+            <div class="instructor-toolbar">
+                <h2 class="section-title">Student Dashboard</h2>
+                <button id="student-logout-btn" class="btn-secondary">Logout</button>
+            </div>
             <div class="dashboard-grid">
                 <div class="sidebar">
                     <ul class="sidebar-menu">
@@ -201,6 +201,91 @@
                     <div id="dashboard-certificates" class="dashboard-section" style="display: none;">
                         <h3>Certificates</h3>
                         <p>No certificates available yet. Complete a course to earn your certificate!</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- INSTRUCTOR DASHBOARD -->
+        <section id="instructor-dashboard" class="section">
+            <div class="container">
+                <h2 class="section-title">Instructor Dashboard</h2>
+                
+                <!-- Instructor Login Form -->
+                <div id="instructor-login-section">
+                    <h3>Instructor Login</h3>
+                    <form id="instructor-login-form">
+                        <div class="form-group">
+                            <label for="instructor-email">Instructor Email</label>
+                            <input type="email" id="instructor-email" name="email" placeholder="john@instructor.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="instructor-password">Password</label>
+                            <input type="password" id="instructor-password" name="password" placeholder="instructor123" required>
+                        </div>
+                        <button type="submit" class="btn-primary">Login as Instructor</button>
+                    </form>
+                    <p class="text-muted">Demo credentials: john@instructor.com / instructor123</p>
+                </div>
+                
+                <!-- Instructor Dashboard Content (hidden by default) -->
+                <div id="instructor-dashboard-content" style="display: none;">
+                    <div class="instructor-toolbar">
+                        <div class="instructor-greeting">
+                            <h3>Welcome, <span id="instructor-name"></span>!</h3>
+                        </div>
+                        <div class="instructor-actions">
+                            <button class="instructor-nav-btn active" data-target="overview">Overview</button>
+                            <button class="instructor-nav-btn" data-target="courses">My Courses</button>
+                            <button id="instructor-logout-btn" class="btn-secondary">Logout</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Overview View -->
+                    <div id="instructor-overview" class="instructor-view active">
+                        <div class="stats-section">
+                            <h4 class="section-subtitle">Overview</h4>
+                            <div class="stats-grid">
+                                <div class="stat-card">
+                                    <div class="stat-label">Total Courses</div>
+                                    <div id="stat-total-courses" class="stat-number">0</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">Total Students</div>
+                                    <div id="stat-total-students" class="stat-number">0</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">Average Progress</div>
+                                    <div id="stat-avg-progress" class="stat-number">0%</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="progress-section">
+                            <h4 class="section-subtitle">Student Progress Breakdown</h4>
+                            <div class="progress-grid">
+                                <div class="progress-card">
+                                    <div class="progress-label">Not Started</div>
+                                    <div id="stat-not-started" class="progress-count">0</div>
+                                </div>
+                                <div class="progress-card">
+                                    <div class="progress-label">In Progress</div>
+                                    <div id="stat-in-progress" class="progress-count">0</div>
+                                </div>
+                                <div class="progress-card">
+                                    <div class="progress-label">Completed</div>
+                                    <div id="stat-completed" class="progress-count">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- My Courses View -->
+                    <div id="instructor-courses" class="instructor-view" style="display: none;">
+                        <h4>My Courses</h4>
+                        <div id="instructor-courses-list" class="courses-list">
+                            <!-- Courses will be populated by JavaScript -->
+                        </div>
                     </div>
                 </div>
             </div>

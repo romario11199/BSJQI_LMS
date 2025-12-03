@@ -249,6 +249,292 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
+// ==================== INSTRUCTOR AUTHENTICATION ====================
+
+// Instructor login
+app.post('/api/instructor/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        console.log('Instructor login attempt for:', email);
+
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+        const request = pool.request();
+
+        // Fetch instructor by email
+        const result = await request
+            .input('Email', sql.NVarChar(255), email)
+            .query(`
+                SELECT InstructorID, FirstName, LastName, Email, Department, HireDate, PasswordHash, IsActive
+                FROM Instructors
+                WHERE Email = @Email AND IsActive = 1
+            `);
+
+        if (!result.recordset || result.recordset.length === 0) {
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Invalid instructor email or account inactive' 
+            });
+        }
+
+        const instructor = result.recordset[0];
+        const storedHash = instructor.PasswordHash || '';
+
+        // For demo, compare directly (in production, use bcrypt.compare)
+        let passwordMatches = false;
+        
+        // Check if it's a bcrypt hash or plain text
+        if (typeof storedHash === 'string' && storedHash.startsWith('$2')) {
+            // If using bcrypt hashes
+            passwordMatches = await bcrypt.compare(password, storedHash);
+        } else {
+            // For plain text passwords (demo/testing)
+            passwordMatches = (password === storedHash);
+        }
+
+        if (!passwordMatches) {
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Invalid password' 
+            });
+        }
+
+        // Update last login time (if you have this column)
+        try {
+            await pool.request()
+                .input('InstructorID', sql.Int, instructor.InstructorID)
+                .query(`
+                    UPDATE Instructors 
+                    SET LastLogin = GETDATE() 
+                    WHERE InstructorID = @InstructorID
+                `);
+        } catch (err) {
+            console.log('Note: LastLogin column might not exist:', err.message);
+        }
+
+        res.json({
+            success: true,
+            instructor: {
+                InstructorID: instructor.InstructorID,
+                fullName: `${instructor.FirstName} ${instructor.LastName}`,
+                firstName: instructor.FirstName,
+                lastName: instructor.LastName,
+                email: instructor.Email,
+                department: instructor.Department,
+                hireDate: instructor.HireDate
+            },
+            message: 'Instructor login successful'
+        });
+
+    } catch (error) {
+        console.error('Instructor login error:', error.message || error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message || 'Server error' 
+        });
+    }
+});
+
+// Get instructor dashboard stats
+app.get('/api/instructor/:instructorId/stats', async (req, res) => {
+    try {
+        const instructorId = req.params.instructorId;
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+        const request = pool.request();
+
+        // Get total courses taught by this instructor
+        const coursesResult = await request
+            .input('InstructorID', sql.Int, instructorId)
+            .query(`
+                SELECT COUNT(*) as TotalCourses
+                FROM Courses
+                WHERE InstructorID = @InstructorID AND IsActive = 1
+            `);
+
+        // Get total students enrolled in instructor's courses
+        const studentsResult = await request
+            .input('InstructorID', sql.Int, instructorId)
+            .query(`
+                SELECT COUNT(DISTINCT ce.StudentID) as TotalStudents
+                FROM CourseEnrollments ce
+                INNER JOIN Courses c ON ce.CourseID = c.CourseID
+                WHERE c.InstructorID = @InstructorID
+            `);
+
+        // Get average progress for instructor's courses
+        const progressResult = await request
+            .input('InstructorID', sql.Int, instructorId)
+            .query(`
+                SELECT AVG(ce.ProgressPercentage) as AverageProgress
+                FROM CourseEnrollments ce
+                INNER JOIN Courses c ON ce.CourseID = c.CourseID
+                WHERE c.InstructorID = @InstructorID
+            `);
+
+        // Get total revenue from instructor's courses
+        const revenueResult = await request
+            .input('InstructorID', sql.Int, instructorId)
+            .query(`
+                SELECT SUM(ce.AmountPaid) as TotalRevenue
+                FROM CourseEnrollments ce
+                INNER JOIN Courses c ON ce.CourseID = c.CourseID
+                WHERE c.InstructorID = @InstructorID
+            `);
+
+        // Get progress breakdown
+        const breakdownResult = await request
+            .input('InstructorID', sql.Int, instructorId)
+            .query(`
+                SELECT 
+                    SUM(CASE WHEN ce.ProgressPercentage = 0 THEN 1 ELSE 0 END) as NotStartedStudents,
+                    SUM(CASE WHEN ce.ProgressPercentage > 0 AND ce.ProgressPercentage < 100 THEN 1 ELSE 0 END) as InProgressStudents,
+                    SUM(CASE WHEN ce.IsCompleted = 1 THEN 1 ELSE 0 END) as CompletedStudents
+                FROM CourseEnrollments ce
+                INNER JOIN Courses c ON ce.CourseID = c.CourseID
+                WHERE c.InstructorID = @InstructorID
+            `);
+
+        const stats = {
+            TotalCourses: coursesResult.recordset[0]?.TotalCourses || 0,
+            TotalStudents: studentsResult.recordset[0]?.TotalStudents || 0,
+            AverageProgress: Math.round(progressResult.recordset[0]?.AverageProgress || 0),
+            TotalRevenue: revenueResult.recordset[0]?.TotalRevenue || 0,
+            NotStartedStudents: breakdownResult.recordset[0]?.NotStartedStudents || 0,
+            InProgressStudents: breakdownResult.recordset[0]?.InProgressStudents || 0,
+            CompletedStudents: breakdownResult.recordset[0]?.CompletedStudents || 0
+        };
+
+        res.json({ 
+            success: true, 
+            stats: stats 
+        });
+
+    } catch (error) {
+        console.error('Instructor stats error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
+
+// Get instructor's courses
+app.get('/api/instructor/:instructorId/courses', async (req, res) => {
+    try {
+        const instructorId = req.params.instructorId;
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+        const request = pool.request();
+
+        const result = await request
+            .input('InstructorID', sql.Int, instructorId)
+            .query(`
+                SELECT 
+                    c.CourseID,
+                    c.CourseCode,
+                    c.Title,
+                    c.Description,
+                    c.Price,
+                    c.DurationWeeks,
+                    c.Category,
+                    c.InstructorName,
+                    COUNT(ce.EnrollmentID) as TotalEnrollments,
+                    AVG(ce.ProgressPercentage) as AverageProgress
+                FROM Courses c
+                LEFT JOIN CourseEnrollments ce ON c.CourseID = ce.CourseID
+                WHERE c.InstructorID = @InstructorID AND c.IsActive = 1
+                GROUP BY 
+                    c.CourseID, c.CourseCode, c.Title, c.Description, 
+                    c.Price, c.DurationWeeks, c.Category, c.InstructorName
+                ORDER BY c.CourseCode
+            `);
+
+        const courses = result.recordset.map(course => ({
+            CourseID: course.CourseID,
+            CourseCode: course.CourseCode,
+            Title: course.Title,
+            Description: course.Description,
+            Price: course.Price,
+            DurationWeeks: course.DurationWeeks,
+            Category: course.Category,
+            InstructorName: course.InstructorName,
+            TotalEnrollments: course.TotalEnrollments,
+            AverageProgress: Math.round(course.AverageProgress || 0)
+        }));
+
+        res.json({ 
+            success: true, 
+            courses: courses 
+        });
+
+    } catch (error) {
+        console.error('Instructor courses error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
+
+// Get students in instructor's courses
+app.get('/api/instructor/:instructorId/students', async (req, res) => {
+    try {
+        const instructorId = req.params.instructorId;
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+        const request = pool.request();
+
+        const result = await request
+            .input('InstructorID', sql.Int, instructorId)
+            .query(`
+                SELECT 
+                    s.StudentID,
+                    s.FirstName,
+                    s.LastName,
+                    s.Email,
+                    s.PhoneNumber,
+                    c.CourseCode,
+                    c.Title as CourseTitle,
+                    ce.EnrollmentDate,
+                    ce.ProgressPercentage,
+                    ce.IsCompleted,
+                    ce.AmountPaid
+                FROM CourseEnrollments ce
+                INNER JOIN Students s ON ce.StudentID = s.StudentID
+                INNER JOIN Courses c ON ce.CourseID = c.CourseID
+                WHERE c.InstructorID = @InstructorID
+                ORDER BY ce.EnrollmentDate DESC
+            `);
+
+        const students = result.recordset.map(student => ({
+            StudentID: student.StudentID,
+            FullName: `${student.FirstName} ${student.LastName}`,
+            Email: student.Email,
+            PhoneNumber: student.PhoneNumber,
+            CourseCode: student.CourseCode,
+            CourseTitle: student.CourseTitle,
+            EnrollmentDate: student.EnrollmentDate,
+            ProgressPercentage: student.ProgressPercentage,
+            IsCompleted: student.IsCompleted,
+            AmountPaid: student.AmountPaid
+        }));
+
+        res.json({ 
+            success: true, 
+            students: students 
+        });
+
+    } catch (error) {
+        console.error('Instructor students error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
+
 // Enroll in course
 app.post('/api/enroll', async (req, res) => {
     try {
@@ -431,7 +717,6 @@ app.post('/api/update-progress', async (req, res) => {
                 END
                 WHERE StudentID = @StudentID AND CourseID = @CourseID
             `);
-        
         // Get updated values
         const selectResult = await pool.request()
             .input('StudentID', sql.Int, StudentID)
@@ -511,3 +796,23 @@ app.get('/api/debug/students-schema', async (req, res) => {
         res.status(500).json({ success: false, message: err.message || err });
     }
 });
+
+// Debug: fetch instructor record by email
+app.get('/api/debug/instructor', async (req, res) => {
+    try {
+        const email = (req.query.email || '').trim();
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'Email query parameter is required' });
+        }
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+        const result = await pool.request()
+            .input('Email', sql.NVarChar(255), email)
+            .query(`SELECT TOP 1 InstructorID, FirstName, LastName, Email, PasswordHash, IsActive FROM dbo.Instructors WHERE Email = @Email`);
+        res.json({ success: true, record: result.recordset[0] || null });
+    } catch (err) {
+        console.error('Debug instructor error:', err.message || err);
+        res.status(500).json({ success: false, message: err.message || err });
+    }
+});
+

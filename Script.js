@@ -1,582 +1,18 @@
-// Sample course data
-const courses = [
-    {
-        id:'CS101',
-        title: 'ISO 9001:2015 Module 1',
-        description: 'Understanding the Basics of ISO Quality Management System (QMS).',
-        price: 30000.00,
-        image: 'ISO-9001:2015',
-        duration: '1 weeks',
-        instructor: 'John Smith'
-    },
-    {
-        id: 'CS201',
-        title: 'PECB Level 27001',
-        description: 'Master Python, statistics, and machine learning concepts.',
-        price: 60000.00,
-        image: 'Data Science',
-        duration: '3 weeks',
-        instructor: 'Sarah Johnson'
-    },
-    {
-        id: 'RS301',
-        title: 'Risk Management',
-        description: 'Learn basic to identifing risks in your envirnoment.',
-        price: 100000.00,
-        image: 'Health and Safety',
-        duration: '6 weeks',
-        instructor: 'Michael Brown'
-    },
-    
-];
-
-// User data storage (in a real app, this would be on a server)
-let users = JSON.parse(localStorage.getItem('lmsUsers')) || [];
-let currentUser = JSON.parse(localStorage.getItem('lmsCurrentUser')) || null;
-let selectedCourse = null;
-let enrolledCourses = JSON.parse(localStorage.getItem('lmsEnrolledCourses')) || {};
-
-// DOM Elements
-const sections = document.querySelectorAll('.section');
-const navLinks = document.querySelectorAll('.nav-link');
-const registrationForm = document.getElementById('registration-form');
-const loginForm = document.getElementById('login-form');
-const paymentForm = document.getElementById('payment-form');
-const courseGrid = document.querySelector('#courses .course-grid');
-const paymentSummary = document.getElementById('payment-summary');
-const paymentMethods = document.querySelectorAll('.payment-method');
-const enrollButtons = document.querySelectorAll('.enroll-btn');
-const dashboardNav = document.querySelectorAll('.dashboard-nav');
-const dashboardSections = document.querySelectorAll('.dashboard-section');
-
-// Initialize the application
-function init() {
-    // Check if user is logged in
-    if (currentUser) {
-        showSection('dashboard');
-        updateDashboard();
-    } else {
-        showSection('home');
-    }
-    
-    // Populate courses
-    renderCourses();
-    
-    // Set up event listeners
-    setupEventListeners();
-}
-
-// Set up all event listeners
-function setupEventListeners() {
-    // Navigation
-    navLinks.forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const target = e.target.getAttribute('data-target');
-            showSection(target);
-        });
-    });
-    
-    // Registration form
-    registrationForm.addEventListener('submit', handleRegistration);
-    
-    // Login form
-    loginForm.addEventListener('submit', handleLogin);
-    
-    // Payment form
-    paymentForm.addEventListener('submit', handlePayment);
-    
-    // Payment method selection
-    paymentMethods.forEach(method => {
-        method.addEventListener('click', () => {
-            paymentMethods.forEach(m => m.classList.remove('selected'));
-            method.classList.add('selected');
-        });
-    });
-    
-    // Enroll buttons on home page
-    enrollButtons.forEach(button => {
-        button.addEventListener('click', (e) => {
-            if (!currentUser) {
-                showSection('login');
-                alert('Please login to enroll in courses');
-                return;
-            }
-            
-            const courseId = e.target.getAttribute('data-course');
-            selectCourse(courseId);
-        });
-    });
-    
-    // Dashboard navigation
-    dashboardNav.forEach(nav => {
-        nav.addEventListener('click', (e) => {
-            e.preventDefault();
-            const content = e.target.getAttribute('data-content');
-            
-            dashboardNav.forEach(n => n.classList.remove('active'));
-            e.target.classList.add('active');
-            
-            dashboardSections.forEach(section => {
-                section.style.display = 'none';
-            });
-            
-            document.getElementById(`dashboard-${content}`).style.display = 'block';
-        });
-    });
-}
-
-// Update the showSection function to handle case sensitivity
-function showSection(sectionId) {
-    sections.forEach(section => {
-        section.classList.remove('active');
-    });
-    
-    // Convert to lowercase for consistency
-    const normalizedSectionId = sectionId.toLowerCase();
-    document.getElementById(normalizedSectionId).classList.add('active');
-    
-    // Update navigation
-    navLinks.forEach(link => {
-        link.classList.remove('active');
-        if (link.getAttribute('data-target').toLowerCase() === normalizedSectionId) {
-            link.classList.add('active');
-        }
-    });
-}
-
-// Update the init function to use correct case
-function init() {
-    // Check if user is logged in
-    if (currentUser) {
-        showSection('dashboard');
-        updateDashboard();
-    } else {
-        showSection('home'); // Make sure this is lowercase
-    }
-    
-    // Populate courses
-    renderCourses();
-    
-    // Set up event listeners
-    setupEventListeners();
-}
-
-// Render courses in the courses section
-function renderCourses() {
-    courseGrid.innerHTML = '';
-    
-    courses.forEach(course => {
-        const courseCard = document.createElement('div');
-        courseCard.className = 'course-card';
-        courseCard.innerHTML = `
-            <div class="course-image">${course.image}</div>
-            <div class="course-content">
-                <h3 class="course-title">${course.title}</h3>
-                <p class="course-description">${course.description}</p>
-                <div class="course-meta">
-                    <p><strong>Duration:</strong> ${course.duration}</p>
-                    <p><strong>Instructor:</strong> ${course.instructor}</p>
-                </div>
-                <div class="course-price">$${course.price.toFixed(2)}</div>
-                <button class="enroll-btn" data-course="${course.id}">Enroll Now</button>
-            </div>
-        `;
-        
-        courseGrid.appendChild(courseCard);
-    });
-    
-    // Add event listeners to enroll buttons
-    document.querySelectorAll('#courses .enroll-btn').forEach(button => {
-        button.addEventListener('click', (e) => {
-            if (!currentUser) {
-                showSection('login');
-                alert('Please login to enroll in courses');
-                return;
-            }
-            
-            const courseId = e.target.getAttribute('data-course');
-            selectCourse(courseId);
-        });
-    });
-}
-
-// Handle user registration
-function handleRegistration(e) {
-    e.preventDefault();
-    
-  const formData = new FormData(e.target);
-
-const firstName = formData.get('firstname');
-const lastName = formData.get('lastname');
-
-const userData = {
-    firstName: firstName,
-    lastName: lastName,
-    fullName: `${firstName} ${lastName}`,
-    email: formData.get('email'),
-    password: formData.get('password'),
-    id: Date.now().toString()
- };
-    
-    // Check if user already exists
-    const existingUser = users.find(user => user.email === userData.email);
-    if (existingUser) {
-        alert('User with this email already exists');
-        return;
-    }
-    
-    // Check if passwords match
-    if (formData.get('password') !== formData.get('confirm-password')) {
-        alert('Passwords do not match');
-        return;
-    }
-    
-    // Add user to storage
-    users.push(userData);
-    localStorage.setItem('lmsUsers', JSON.stringify(users));
-    
-    alert('Registration successful! Please login to continue.');
-    showSection('login');
-    registrationForm.reset();
-}
-
-// Handle user login
-function handleLogin(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(e.target);
-    const email = formData.get('email');
-    const password = formData.get('password');
-    
-    // Find user
-    const user = users.find(u => u.email === email && u.password === password);
-    
-    if (user) {
-        currentUser = user;
-        localStorage.setItem('lmsCurrentUser', JSON.stringify(currentUser));
-        
-        alert(`Welcome back, ${user.fullName}!`);
-        showSection('dashboard');
-        updateDashboard();
-        loginForm.reset();
-    } else {
-        alert('Invalid email or password');
-    }
-}
-
-// Select a course for enrollment
-function selectCourse(courseId) {
-    selectedCourse = courses.find(course => course.id === courseId);
-    
-    if (selectedCourse) {
-        // Check if user is already enrolled
-        if (enrolledCourses[currentUser.id] && enrolledCourses[currentUser.id].some(c => c.id === courseId)) {
-            alert('You are already enrolled in this course');
-            showSection('dashboard');
-            return;
-        }
-        
-        showSection('payment');
-        updatePaymentSummary();
-    }
-}
-
-// Update payment summary
-function updatePaymentSummary() {
-    if (!selectedCourse) return;
-    
-    paymentSummary.innerHTML = `
-        <h3>Order Summary</h3>
-        <p><strong>Course:</strong> ${selectedCourse.title}</p>
-        <p><strong>Price:</strong> $${selectedCourse.price.toFixed(2)}</p>
-        <p><strong>Total:</strong> $${selectedCourse.price.toFixed(2)}</p>
-    `;
-}
-
-// Handle payment
-function handlePayment(e) {
-    e.preventDefault();
-    
-    if (!selectedCourse) {
-        alert('No course selected');
-        return;
-    }
-    
-    // In a real app, this would process the payment
-    alert('Payment processed successfully!');
-    
-    // Enroll user in the course
-    if (!enrolledCourses[currentUser.id]) {
-        enrolledCourses[currentUser.id] = [];
-    }
-    
-    enrolledCourses[currentUser.id].push({
-        ...selectedCourse,
-        enrolledDate: new Date().toISOString(),
-        progress: 0,
-        completed: false
-    });
-    
-    localStorage.setItem('lmsEnrolledCourses', JSON.stringify(enrolledCourses));
-    
-    // Reset and show dashboard
-    selectedCourse = null;
-    showSection('dashboard');
-    updateDashboard();
-    paymentForm.reset();
-}
-
-// Update dashboard with user data
-function updateDashboard() {
-    if (!currentUser) return;
-    
-    // Update profile
-    document.getElementById('profile-details').innerHTML = `
-        <p><strong>Name:</strong> ${currentUser.fullName}</p>
-        <p><strong>Email:</strong> ${currentUser.email}</p>
-    `;
-    
-    // Update enrolled courses
-    const enrolledList = document.querySelector('.course-list');
-    enrolledList.innerHTML = '';
-    
-    if (enrolledCourses[currentUser.id] && enrolledCourses[currentUser.id].length > 0) {
-        enrolledCourses[currentUser.id].forEach(course => {
-            const courseElement = document.createElement('div');
-            courseElement.className = 'enrolled-course';
-            courseElement.innerHTML = `
-                <h4>${course.title}</h4>
-                <p>Enrolled: ${new Date(course.enrolledDate).toLocaleDateString()}</p>
-                <div class="progress-bar">
-                    <div class="progress" style="width: ${course.progress}%"></div>
-                </div>
-                <p>Progress: ${course.progress}%</p>
-                <button class="access-course" data-course="${course.id}">Access Course</button>
-            `;
-            enrolledList.appendChild(courseElement);
-        });
-        
-        // Add event listeners to access course buttons
-        document.querySelectorAll('.access-course').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const courseId = e.target.getAttribute('data-course');
-                accessCourse(courseId);
-            });
-        });
-    } else {
-        enrolledList.innerHTML = '<p>You are not enrolled in any courses yet.</p>';
-    }
-    
-    // Update progress
-    const progressDetails = document.getElementById('progress-details');
-    if (enrolledCourses[currentUser.id] && enrolledCourses[currentUser.id].length > 0) {
-        let progressHTML = '';
-        enrolledCourses[currentUser.id].forEach(course => {
-            progressHTML += `
-                <div style="margin-bottom: 15px;">
-                    <p><strong>${course.title}</strong></p>
-                    <div class="progress-bar">
-                        <div class="progress" style="width: ${course.progress}%"></div>
-                    </div>
-                    <p>${course.progress}% complete</p>
-                </div>
-            `;
-        });
-        progressDetails.innerHTML = progressHTML;
-    } else {
-        progressDetails.innerHTML = '<p>No progress to display. Enroll in a course to get started!</p>';
-    }
-}
-
-// Access a course (simulated)
-function accessCourse(courseId) {
-    const course = enrolledCourses[currentUser.id].find(c => c.id === courseId);
-    
-    if (course) {
-        alert(`Accessing course: ${course.title}\n\nThis would open the course content in a real LMS.`);
-        
-        // Simulate progress update
-        if (course.progress < 100) {
-            course.progress = Math.min(100, course.progress + 10);
-            localStorage.setItem('lmsEnrolledCourses', JSON.stringify(enrolledCourses));
-            updateDashboard();
-        }
-    }
-}
-
-// Logout function (can be added to the dashboard)
-function logout() {
-    currentUser = null;
-    localStorage.removeItem('lmsCurrentUser');
-    showSection('home');
-    alert('You have been logged out successfully.');
-}
-
-// Initialize the application when DOM is loaded
-document.addEventListener('DOMContentLoaded', init);
-
-//----------------------------------------------------------------
-
 // API Base URL
 const API_BASE_URL = 'http://localhost:5500/api';
 
-// Test database connection
-async function testConnection() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/test`);
-        const result = await response.json();
-        console.log('Database connection:', result);
-        return result.success;
-    } catch (error) {
-        console.log('Server not running. Start with: node server.js');
-        return false;
-    }
-}
+// Global state
+let currentStudent = JSON.parse(localStorage.getItem('currentStudent')) || null;
+let currentInstructor = JSON.parse(localStorage.getItem('currentInstructor')) || null;
+let selectedCourse = null;
 
-// Load courses from database
-async function loadCoursesFromDB() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/courses`);
-        const result = await response.json();
-        
-        if (result.success) {
-            return result.courses;
-        } else {
-            console.error('Failed to load courses:', result.message);
-            return [];
-        }
-    } catch (error) {
-        console.error('Error loading courses from database:', error);
-        return [];
-    }
-}
-
-// Update your renderCourses function to use database data
-async function renderCourses() {
-    courseGrid.innerHTML = '<p>Loading courses...</p>';
-    
-    const dbCourses = await loadCoursesFromDB();
-    
-    // Use database courses if available, otherwise use sample data
-    const coursesToDisplay = dbCourses.length > 0 ? dbCourses : courses;
-    
-    courseGrid.innerHTML = '';
-    
-    coursesToDisplay.forEach(course => {
-        const courseCard = document.createElement('div');
-        courseCard.className = 'course-card';
-        courseCard.innerHTML = `
-            <div class="course-image">${course.Category || course.image}</div>
-            <div class="course-content">
-                <h3 class="course-title">${course.Title}</h3>
-                <p class="course-description">${course.Description}</p>
-                <div class="course-meta">
-                    <p><strong>Course Code:</strong> ${course.CourseCode}</p>
-                    <p><strong>Duration:</strong> ${course.DurationWeeks} weeks</p>
-                    <p><strong>Instructor:</strong> ${course.InstructorName}</p>
-                </div>
-                <div class="course-price">JMD$${course.Price.toFixed(2)}</div>
-                <button class="enroll-btn" data-course="${course.CourseCode}">Enroll Now</button>
-            </div>
-        `;
-        
-        courseGrid.appendChild(courseCard);
-    });
-    
-    // Add event listeners to enroll buttons
-    document.querySelectorAll('#courses .enroll-btn').forEach(button => {
-        button.addEventListener('click', (e) => {
-            if (!currentUser) {
-                showSection('login');
-                alert('Please login to enroll in courses');
-                return;
-            }
-            
-            const courseCode = e.target.getAttribute('data-course');
-            selectCourse(courseCode);
-        });
-    });
-}
-
-// Update your existing functions to use the API
-async function handleRegistration(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(e.target);
-    
-    try {
-        const response = await fetch(`${API_BASE_URL}/register`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-                body: JSON.stringify({
-                firstName: formData.get('firstName') || formData.get('fullName')?.split(' ')[0],
-                lastName: formData.get('lastName') || formData.get('fullName')?.split(' ')[1] || '',
-                email: formData.get('email'),
-                password: formData.get('password')
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            alert('Registration successful! Please login.');
-            showSection('login');
-            registrationForm.reset();
-        } else {
-            alert('Error: ' + result.message);
-        }
-    } catch (error) {
-        alert('Registration failed. Make sure server is running.');
-    }
-}
-
-async function handleLogin(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(e.target);
-    
-    try {
-        const response = await fetch(`${API_BASE_URL}/login`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                email: formData.get('email'),
-                password: formData.get('password')
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            currentUser = result.user;
-            localStorage.setItem('currentUser', JSON.stringify(currentUser));
-            alert('Login successful!');
-            showSection('dashboard');
-            updateDashboard();
-            loginForm.reset();
-        } else {
-            alert('Error: ' + result.message);
-        }
-    } catch (error) {
-        alert('Login failed. Make sure server is running.');
-    }
-}
-
-// Update your init function
-function init() {
-    // Test database connection// Sample course data (fallback if database fails)
+// Course data (fallback)
 const courses = [
     {
         id: 'CS101',
         title: 'ISO 9001:2015 Module 1',
         description: 'Understanding the Basics of ISO Quality Management System (QMS).',
         price: 30000.00,
-        image: 'ISO-9001:2015',
         duration: '1 weeks',
         instructor: 'John Smith'
     },
@@ -585,7 +21,6 @@ const courses = [
         title: 'PECB Level 27001',
         description: 'Master Python, statistics, and machine learning concepts.',
         price: 60000.00,
-        image: 'Data Science',
         duration: '3 weeks',
         instructor: 'Sarah Johnson'
     },
@@ -594,16 +29,10 @@ const courses = [
         title: 'Risk Management',
         description: 'Learn basic to identifing risks in your envirnoment.',
         price: 100000.00,
-        image: 'Health and Safety',
         duration: '6 weeks',
         instructor: 'Michael Brown'
     }
 ];
-
-// Student data storage
-let Students = JSON.parse(localStorage.getItem('lmsStudents')) || [];
-let currentStudent = JSON.parse(localStorage.getItem('currentStudent')) || null;
-let selectedCourse = null;
 
 // DOM Elements
 const sections = document.querySelectorAll('.section');
@@ -611,171 +40,370 @@ const navLinks = document.querySelectorAll('.nav-link');
 const registrationForm = document.getElementById('registration-form');
 const loginForm = document.getElementById('login-form');
 const paymentForm = document.getElementById('payment-form');
-const courseGrid = document.querySelector('#courses .course-grid');
+const courseGrid = document.getElementById('courses-grid');
 const paymentSummary = document.getElementById('payment-summary');
 const paymentMethods = document.querySelectorAll('.payment-method');
-const enrollButtons = document.querySelectorAll('.enroll-btn');
 const dashboardNav = document.querySelectorAll('.dashboard-nav');
 const dashboardSections = document.querySelectorAll('.dashboard-section');
+const studentLogoutBtn = document.getElementById('student-logout-btn');
 
-// API Base URL - FIXED PORT
-const API_BASE_URL = 'http://localhost:5500/api';
+// Instructor elements
+const instructorLoginForm = document.getElementById('instructor-login-form');
+const instructorNavBtns = document.querySelectorAll('.instructor-nav-btn');
+const instructorViews = document.querySelectorAll('.instructor-view');
+const instructorLogoutBtn = document.getElementById('instructor-logout-btn');
+const instructorLoginSection = document.getElementById('instructor-login-section');
+const instructorDashboardContent = document.getElementById('instructor-dashboard-content');
+const instructorNameSpan = document.getElementById('instructor-name');
 
-// Initialize the application
+// Initialize application
 function init() {
-    // Test database connection
-    testConnection();
+    console.log('Initializing application...');
     
-    // Check if Student is logged in
+    // Check if student is logged in
     if (currentStudent) {
         showSection('dashboard');
         updateDashboard();
-    } else {
+    } 
+    // Check if instructor is logged in
+    else if (currentInstructor) {
+        showInstructorDashboard();
+    }
+    // No one is logged in
+    else {
         showSection('home');
     }
     
-    // Populate courses from database
-    renderCourses();
+    // Load courses
+    loadAndRenderCourses();
     
-    // Set up event listeners
+    // Setup event listeners
     setupEventListeners();
 }
 
-// Set up all event listeners
+// Setup event listeners
 function setupEventListeners() {
     // Navigation
     navLinks.forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
             const target = e.target.getAttribute('data-target');
+            
+            // Special handling for instructor dashboard link
+            if (target === 'instructor-dashboard') {
+                if (!currentInstructor) {
+                    showSection('instructor-dashboard');
+                    return;
+                }
+            }
+            
             showSection(target);
         });
     });
     
-    // Registration form - USE API
-    registrationForm.addEventListener('submit', handleRegistration);
+    // Student registration
+    if (registrationForm) {
+        registrationForm.addEventListener('submit', handleRegistration);
+    }
     
-    // Login form - USE API
-    loginForm.addEventListener('submit', handleLogin);
+    // Student login
+    if (loginForm) {
+        loginForm.addEventListener('submit', handleLogin);
+    }
     
-    // Payment form - USE API
-    paymentForm.addEventListener('submit', handlePayment);
+    // Payment form
+    if (paymentForm) {
+        paymentForm.addEventListener('submit', handlePayment);
+    }
     
     // Payment method selection
-    paymentMethods.forEach(method => {
-        method.addEventListener('click', () => {
-            paymentMethods.forEach(m => m.classList.remove('selected'));
-            method.classList.add('selected');
+    if (paymentMethods.length > 0) {
+        paymentMethods.forEach(method => {
+            method.addEventListener('click', () => {
+                paymentMethods.forEach(m => m.classList.remove('selected'));
+                method.classList.add('selected');
+            });
         });
-    });
-    
-    // Enroll buttons on home page
-    enrollButtons.forEach(button => {
-        button.addEventListener('click', (e) => {
-            if (!currentStudent) {
-                showSection('login');
-                alert('Please login to enroll in courses');
-                return;
-            }
-            
-            const courseCode = e.target.getAttribute('data-course');
-            selectCourse(courseCode);
-        });
-    });
+    }
     
     // Dashboard navigation
-    dashboardNav.forEach(nav => {
-        nav.addEventListener('click', (e) => {
-            e.preventDefault();
-            const content = e.target.getAttribute('data-content');
-            
-            dashboardNav.forEach(n => n.classList.remove('active'));
-            e.target.classList.add('active');
-            
-            dashboardSections.forEach(section => {
-                section.style.display = 'none';
+    if (dashboardNav.length > 0) {
+        dashboardNav.forEach(nav => {
+            nav.addEventListener('click', (e) => {
+                e.preventDefault();
+                const content = e.target.getAttribute('data-content');
+                
+                dashboardNav.forEach(n => n.classList.remove('active'));
+                e.target.classList.add('active');
+                
+                dashboardSections.forEach(section => {
+                    section.style.display = 'none';
+                });
+                
+                const targetSection = document.getElementById(`dashboard-${content}`);
+                if (targetSection) {
+                    targetSection.style.display = 'block';
+                }
+                
+                if (content === 'my-courses') {
+                    updateDashboard();
+                }
             });
-            
-            document.getElementById(`dashboard-${content}`).style.display = 'block';
-            
-            // Refresh dashboard data when switching to my-courses
-            if (content === 'my-courses') {
-                updateDashboard();
-            }
+        });
+    }
+    
+    // Student logout button
+    if (studentLogoutBtn) {
+        studentLogoutBtn.addEventListener('click', logoutStudent);
+    }
+    
+    // Instructor login form
+    if (instructorLoginForm) {
+        instructorLoginForm.addEventListener('submit', handleInstructorLogin);
+    }
+    
+    // Instructor logout button
+    if (instructorLogoutBtn) {
+        instructorLogoutBtn.addEventListener('click', handleInstructorLogout);
+    }
+    
+    // Instructor navigation buttons
+    instructorNavBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const viewId = e.target.getAttribute('data-target');
+            showInstructorView(viewId);
         });
     });
 }
 
-// Show a specific section and hide others
+// Show section
 function showSection(sectionId) {
+    console.log('Showing section:', sectionId);
+    
     sections.forEach(section => {
         section.classList.remove('active');
+        section.style.display = 'none';
     });
     
-    // Convert to lowercase for consistency
-    const normalizedSectionId = sectionId.toLowerCase();
-    const sectionElement = document.getElementById(normalizedSectionId);
+    const sectionElement = document.getElementById(sectionId);
     if (sectionElement) {
         sectionElement.classList.add('active');
+        sectionElement.style.display = 'block';
     }
     
     // Update navigation
     navLinks.forEach(link => {
         link.classList.remove('active');
-        if (link.getAttribute('data-target').toLowerCase() === normalizedSectionId) {
+        if (link.getAttribute('data-target') === sectionId) {
             link.classList.add('active');
         }
     });
 }
 
-// Test database connection
-async function testConnection() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/test`);
-        const result = await response.json();
-        console.log('Database connection:', result);
-        return result.success;
-    } catch (error) {
-        console.log('Server not running. Start with: node server.js');
-        return false;
-    }
-}
+// ==================== INSTRUCTOR FUNCTIONS ====================
 
-// Load courses from database
-async function loadCoursesFromDB() {
+// Handle instructor login
+async function handleInstructorLogin(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const email = formData.get('email').trim();
+    const password = formData.get('password').trim();
+    
     try {
-        const response = await fetch(`${API_BASE_URL}/courses`);
+        const response = await fetch(`${API_BASE_URL}/instructor/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        
         const result = await response.json();
         
         if (result.success) {
-            return result.courses;
+            // Create instructor object
+            currentInstructor = {
+                id: result.instructor.InstructorID,
+                email: result.instructor.email,
+                fullName: result.instructor.fullName,
+                department: result.instructor.department
+            };
+            
+            // Save to localStorage
+            localStorage.setItem('currentInstructor', JSON.stringify(currentInstructor));
+            
+            // Show success and navigate to dashboard
+            showInstructorDashboard();
+            await loadInstructorData();
+            e.target.reset();
         } else {
-            console.error('Failed to load courses:', result.message);
-            return [];
+            alert(result.message || 'Login failed. Please check your credentials.');
         }
     } catch (error) {
-        console.error('Error loading courses from database:', error);
-        return [];
+        console.error('Login error:', error);
+        alert('Login failed due to a server error. Please try again.');
     }
 }
 
-// Render courses in the courses section
-async function renderCourses() {
+// Show instructor dashboard
+function showInstructorDashboard() {
+    if (!currentInstructor) return;
+    
+    if (instructorLoginSection) {
+        instructorLoginSection.style.display = 'none';
+    }
+    
+    if (instructorDashboardContent) {
+        instructorDashboardContent.style.display = 'block';
+    }
+    
+    if (instructorNameSpan) {
+        instructorNameSpan.textContent = currentInstructor.fullName;
+    }
+    
+    showSection('instructor-dashboard');
+    loadInstructorData();
+}
+
+// Handle instructor logout
+function handleInstructorLogout() {
+    currentInstructor = null;
+    localStorage.removeItem('currentInstructor');
+    
+    if (instructorLoginSection) {
+        instructorLoginSection.style.display = 'block';
+    }
+    
+    if (instructorDashboardContent) {
+        instructorDashboardContent.style.display = 'none';
+    }
+    
+    showSection('home');
+    alert('Instructor logged out successfully.');
+}
+
+// Load instructor data
+async function loadInstructorData() {
+    if (!currentInstructor) return;
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/instructor/${currentInstructor.id}/stats`);
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+            const data = result.data;
+            
+            // Update statistics
+            document.getElementById('stat-total-courses').textContent = data.TotalCourses || 0;
+            document.getElementById('stat-total-students').textContent = data.TotalStudents || 0;
+            document.getElementById('stat-avg-progress').textContent = `${Math.round(data.AverageProgress || 0)}%`;
+            
+            // Update progress breakdown
+            document.getElementById('stat-not-started').textContent = data.NotStarted || 0;
+            document.getElementById('stat-in-progress').textContent = data.InProgress || 0;
+            document.getElementById('stat-completed').textContent = data.Completed || 0;
+            
+            // Load instructor courses
+            loadInstructorCourses();
+        }
+    } catch (error) {
+        console.error('Error loading instructor data:', error);
+    }
+}
+
+// Show instructor view
+function showInstructorView(viewId) {
+    // Update active nav button
+    instructorNavBtns.forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.getAttribute('data-target') === viewId) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // Show selected view
+    instructorViews.forEach(view => {
+        view.style.display = 'none';
+        if (view.id === `instructor-${viewId}`) {
+            view.style.display = 'block';
+        }
+    });
+}
+
+// Load instructor courses
+async function loadInstructorCourses() {
+    if (!currentInstructor) return;
+    
+    try {
+        const coursesList = document.getElementById('instructor-courses-list');
+        if (!coursesList) return;
+        
+        const response = await fetch(`${API_BASE_URL}/instructor/${currentInstructor.id}/courses`);
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+            coursesList.innerHTML = result.data.map(course => `
+                <div class="instructor-course-card">
+                    <h5>${course.CourseCode} - ${course.Title}</h5>
+                    <p class="text-muted">${course.Description || ''}</p>
+                    <div class="course-meta">
+                        <span>Duration: ${course.DurationWeeks} weeks</span>
+                        <span>Price: JMD$${(course.Price || 0).toLocaleString()}</span>
+                    </div>
+                    <div class="course-stats">
+                        <span>Enrolled: ${course.EnrolledStudents || 0} students</span>
+                        <span>Avg Progress: ${Math.round(course.AverageProgress || 0)}%</span>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            coursesList.innerHTML = '<p>No courses found.</p>';
+        }
+    } catch (error) {
+        console.error('Error loading instructor courses:', error);
+        const coursesList = document.getElementById('instructor-courses-list');
+        if (coursesList) {
+            coursesList.innerHTML = '<p>Error loading courses.</p>';
+        }
+    }
+}
+
+// ==================== STUDENT FUNCTIONS ====================
+
+// Load and render courses
+async function loadAndRenderCourses() {
+    if (!courseGrid) return;
+    
     courseGrid.innerHTML = '<p>Loading courses...</p>';
     
-    const dbCourses = await loadCoursesFromDB();
+    try {
+        const response = await fetch(`${API_BASE_URL}/courses`);
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                renderCourses(result.courses);
+                return;
+            }
+        }
+    } catch (error) {
+        console.log('Using fallback course data');
+    }
     
-    // Use database courses if available, otherwise use sample data
-    const coursesToDisplay = dbCourses.length > 0 ? dbCourses : courses;
+    // Use fallback data
+    renderCourses(courses);
+}
+
+// Render courses
+function renderCourses(coursesData) {
+    if (!courseGrid) return;
     
     courseGrid.innerHTML = '';
     
-    coursesToDisplay.forEach(course => {
+    coursesData.forEach(course => {
         const courseCode = course.CourseCode || course.id;
         const courseCard = document.createElement('div');
         courseCard.className = 'course-card';
         courseCard.innerHTML = `
-            <div class="course-image">${course.Category || course.image}</div>
+            <div class="course-image">${course.Category || course.image || '📚'}</div>
             <div class="course-content">
                 <h3 class="course-title">${course.Title || course.title}</h3>
                 <p class="course-description">${course.Description || course.description}</p>
@@ -793,7 +421,7 @@ async function renderCourses() {
     });
     
     // Add event listeners to enroll buttons
-    document.querySelectorAll('#courses .enroll-btn').forEach(button => {
+    document.querySelectorAll('.enroll-btn').forEach(button => {
         button.addEventListener('click', (e) => {
             if (!currentStudent) {
                 showSection('login');
@@ -807,42 +435,28 @@ async function renderCourses() {
     });
 }
 
-// Handle Student registration - USING API
+// Handle student registration
 async function handleRegistration(e) {
     e.preventDefault();
     
     const formData = new FormData(e.target);
-    let firstName, lastName, rawFullName;
-
-    // Prefer dedicated fields if present
-    if (formData.get('firstname')) {
-        firstName = (formData.get('firstname') || '').trim();
-        lastName = (formData.get('lastname') || '').trim();
-    } else {
-        // Fallback to fullName (name attribute is fullName in HTML)
-        rawFullName = (formData.get('fullName') || formData.get('fullname') || '').trim();
-        const parts = rawFullName.split(/\s+/).filter(p => p.length);
-        firstName = parts[0] || '';
-        lastName = parts.slice(1).join(' ');
-    }
-
-    console.log('[Registration] Parsed names:', { firstName, lastName });
-
+    const fullName = formData.get('fullName').trim();
+    const parts = fullName.split(/\s+/);
+    const firstName = parts[0] || '';
+    const lastName = parts.slice(1).join(' ') || '';
+    
     if (!firstName) {
-        alert('Could not detect first name. Please enter a valid name.');
+        alert('Please enter your full name');
         return;
     }
     
     try {
         const response = await fetch(`${API_BASE_URL}/register`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 firstName: firstName,
                 lastName: lastName,
-                fullName: rawFullName,
                 email: formData.get('email'),
                 password: formData.get('password')
             })
@@ -853,17 +467,17 @@ async function handleRegistration(e) {
         if (result.success) {
             alert('Registration successful! Please login.');
             showSection('login');
-            registrationForm.reset();
+            e.target.reset();
         } else {
             alert('Error: ' + result.message);
         }
     } catch (error) {
         console.error('Registration error:', error);
-        alert('Registration failed. Make sure server is running.');
+        alert('Registration failed. Please try again.');
     }
 }
 
-// Handle Student login - USING API
+// Handle student login
 async function handleLogin(e) {
     e.preventDefault();
     
@@ -872,9 +486,7 @@ async function handleLogin(e) {
     try {
         const response = await fetch(`${API_BASE_URL}/login`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 email: formData.get('email'),
                 password: formData.get('password')
@@ -884,7 +496,6 @@ async function handleLogin(e) {
         const result = await response.json();
         
         if (result.success) {
-            // Store Student data from API response
             currentStudent = {
                 id: result.Student.StudentID,
                 fullName: result.Student.fullName,
@@ -896,20 +507,18 @@ async function handleLogin(e) {
             alert('Login successful!');
             showSection('dashboard');
             updateDashboard();
-            loginForm.reset();
+            e.target.reset();
         } else {
             alert('Error: ' + result.message);
         }
     } catch (error) {
         console.error('Login error:', error);
-        alert('Login failed. Make sure server is running.');
+        alert('Login failed. Please try again.');
     }
 }
 
-// Select a course for enrollment
+// Select course
 function selectCourse(courseCode) {
-    // For now, we'll use the sample data to show course details
-    // In a real app, you'd fetch course details from the database
     selectedCourse = courses.find(course => course.id === courseCode);
     
     if (selectedCourse) {
@@ -922,7 +531,7 @@ function selectCourse(courseCode) {
 
 // Update payment summary
 function updatePaymentSummary() {
-    if (!selectedCourse) return;
+    if (!selectedCourse || !paymentSummary) return;
     
     paymentSummary.innerHTML = `
         <h3>Order Summary</h3>
@@ -932,24 +541,23 @@ function updatePaymentSummary() {
     `;
 }
 
-// Handle payment - USING API
+// Handle payment
 async function handlePayment(e) {
     e.preventDefault();
     
     if (!selectedCourse || !currentStudent) {
-        alert('No course selected or Student not logged in');
+        alert('No course selected or student not logged in');
         return;
     }
     
     try {
         const selectedPaymentMethod = document.querySelector('.payment-method.selected');
-        const paymentMethod = selectedPaymentMethod ? selectedPaymentMethod.getAttribute('data-method') : 'credit-card';
+        const paymentMethod = selectedPaymentMethod ? 
+            selectedPaymentMethod.getAttribute('data-method') : 'credit-card';
         
         const response = await fetch(`${API_BASE_URL}/enroll`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 StudentID: currentStudent.id,
                 courseCode: selectedCourse.id,
@@ -962,189 +570,69 @@ async function handlePayment(e) {
         if (result.success) {
             alert('Enrollment successful!');
             showSection('dashboard');
-            updateDashboard(); // Refresh dashboard to show new enrollment
-            paymentForm.reset();
+            updateDashboard();
+            e.target.reset();
         } else {
             alert('Error: ' + result.message);
         }
     } catch (error) {
         console.error('Payment error:', error);
-        alert('Enrollment failed. Make sure server is running.');
+        alert('Enrollment failed. Please try again.');
     }
 }
 
-// Load enrolled courses from database
-async function loadEnrolledCourses() {
-    if (!currentStudent) return [];
-    
-    try {
-        const response = await fetch(`${API_BASE_URL}/dashboard/${currentStudent.id}`);
-        const result = await response.json();
-        
-        if (result.success) {
-            return result.enrollments;
-        } else {
-            console.error('Failed to load enrolled courses:', result.message);
-            return [];
-        }
-    } catch (error) {
-        console.error('Error loading enrolled courses:', error);
-        return [];
-    }
-}
-
-// Update dashboard with Student data FROM DATABASE
+// Update dashboard
 async function updateDashboard() {
     if (!currentStudent) return;
     
     // Update profile
-    document.getElementById('profile-details').innerHTML = `
-        <p><strong>Name:</strong> ${currentStudent.fullName}</p>
-        <p><strong>Email:</strong> ${currentStudent.email}</p>
-        <p><strong>Member Since:</strong> ${new Date(currentStudent.registrationDate).toLocaleDateString()}</p>
-    `;
-    
-    // Load enrolled courses FROM DATABASE
-    const enrolledCourses = await loadEnrolledCourses();
-    
-    // Update enrolled courses
-    const enrolledList = document.querySelector('.course-list');
-    enrolledList.innerHTML = '';
-    
-    if (enrolledCourses.length > 0) {
-        enrolledCourses.forEach(course => {
-            const courseElement = document.createElement('div');
-            courseElement.className = 'enrolled-course';
-            courseElement.innerHTML = `
-                <h4>${course.title} (${course.courseCode})</h4>
-                <p><strong>Instructor:</strong> ${course.instructorName}</p>
-                <p><strong>Enrolled:</strong> ${new Date(course.enrollmentDate).toLocaleDateString()}</p>
-                <p><strong>Amount Paid:</strong> JMD$${course.amountPaid.toFixed(2)}</p>
-                <div class="progress-bar">
-                    <div class="progress" style="width: ${course.progressPercentage || 0}%"></div>
-                </div>
-                <p><strong>Progress:</strong> ${course.progressPercentage || 0}%</p>
-                <p><strong>Status:</strong> ${course.isCompleted ? 'Completed' : 'In Progress'}</p>
-                <button class="access-course" data-course="${course.courseCode}">Access Course</button>
-            `;
-            enrolledList.appendChild(courseElement);
-        });
-        
-        // Add event listeners to access course buttons
-        document.querySelectorAll('.access-course').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const courseCode = e.target.getAttribute('data-course');
-                accessCourse(courseCode);
-            });
-        });
-    } else {
-        enrolledList.innerHTML = '<p>You are not enrolled in any courses yet.</p>';
+    const profileDetails = document.getElementById('profile-details');
+    if (profileDetails) {
+        profileDetails.innerHTML = `
+            <p><strong>Name:</strong> ${currentStudent.fullName}</p>
+            <p><strong>Email:</strong> ${currentStudent.email}</p>
+            <p><strong>Member Since:</strong> ${new Date(currentStudent.registrationDate).toLocaleDateString()}</p>
+        `;
     }
     
-    // Update progress section
-    const progressDetails = document.getElementById('progress-details');
-    if (enrolledCourses.length > 0) {
-        let progressHTML = '<h4>Your Learning Progress</h4>';
-        enrolledCourses.forEach(course => {
-            progressHTML += `
-                <div style="margin-bottom: 20px; padding: 10px; border-left: 4px solid #3498db;">
-                    <p><strong>${course.title}</strong></p>
-                    <div class="progress-bar">
-                        <div class="progress" style="width: ${course.progressPercentage || 0}%"></div>
-                    </div>
-                    <p>${course.progressPercentage || 0}% complete</p>
-                    <p><small>Enrolled: ${new Date(course.enrollmentDate).toLocaleDateString()}</small></p>
-                </div>
-            `;
-        });
-        progressDetails.innerHTML = progressHTML;
-    } else {
-        progressDetails.innerHTML = '<p>No progress to display. Enroll in a course to get started!</p>';
-    }
-}
-
-// Access a course (simulated)
-async function accessCourse(courseCode) {
-    if (!currentStudent) {
-        alert('Please login to access courses');
-        return;
-    }
-    
+    // Load enrolled courses
     try {
-        // Update progress in database
-        const response = await fetch(`${API_BASE_URL}/update-progress`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                StudentID: currentStudent.id,
-                courseCode: courseCode,
-                progressIncrement: 10 // Increment by 10% each time
-            })
-        });
-        
+        const response = await fetch(`${API_BASE_URL}/dashboard/${currentStudent.id}`);
         const result = await response.json();
         
-        if (result.success) {
-            const completionMsg = result.isCompleted 
-                ? '\n\nðŸŽ‰ Congratulations! You have completed this course!' 
-                : `\n\nProgress updated: ${result.progressPercentage}%`;
-            
-            alert(`Accessing course: ${courseCode}${completionMsg}\n\nThis would open the course content in a real LMS.`);
-            
-            // Refresh dashboard to show updated progress
-            updateDashboard();
-        } else {
-            alert('Error updating progress: ' + result.message);
+        const enrolledList = document.querySelector('.course-list');
+        if (enrolledList) {
+            if (result.success && result.enrollments.length > 0) {
+                enrolledList.innerHTML = result.enrollments.map(course => `
+                    <div class="enrolled-course">
+                        <h4>${course.title} (${course.courseCode})</h4>
+                        <p><strong>Instructor:</strong> ${course.instructorName}</p>
+                        <p><strong>Enrolled:</strong> ${new Date(course.enrollmentDate).toLocaleDateString()}</p>
+                        <p><strong>Amount Paid:</strong> JMD$${course.amountPaid.toFixed(2)}</p>
+                        <div class="progress-bar">
+                            <div class="progress" style="width: ${course.progressPercentage || 0}%"></div>
+                        </div>
+                        <p><strong>Progress:</strong> ${course.progressPercentage || 0}%</p>
+                        <p><strong>Status:</strong> ${course.isCompleted ? 'Completed' : 'In Progress'}</p>
+                        <button class="access-course" data-course="${course.courseCode}">Access Course</button>
+                    </div>
+                `).join('');
+            } else {
+                enrolledList.innerHTML = '<p>You are not enrolled in any courses yet.</p>';
+            }
         }
     } catch (error) {
-        console.error('Error accessing course:', error);
-        alert(`Accessing course: ${courseCode}\n\nProgress update failed, but course is accessible.`);
+        console.error('Error updating dashboard:', error);
     }
 }
 
-// Logout function
-function logout() {
+// Student logout
+function logoutStudent() {
     currentStudent = null;
     localStorage.removeItem('currentStudent');
     showSection('home');
-    alert('You have been logged out successfully.');
+    alert('Logged out successfully.');
 }
 
-// Add logout button to dashboard (you can add this button to your HTML)
-function addLogoutButton() {
-    const dashboardHeader = document.querySelector('#dashboard .section-title');
-    if (dashboardHeader && !document.getElementById('logout-btn')) {
-        const logoutBtn = document.createElement('button');
-        logoutBtn.id = 'logout-btn';
-        logoutBtn.textContent = 'Logout';
-        logoutBtn.style.marginLeft = '20px';
-        logoutBtn.style.padding = '5px 15px';
-        logoutBtn.style.background = '#e74c3c';
-        logoutBtn.addEventListener('click', logout);
-        dashboardHeader.appendChild(logoutBtn);
-    }
-}
-
-// Initialize the application when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
-    init();
-    addLogoutButton();
-});
-    testConnection();
-    
-    // Check if user is logged in
-    if (currentUser) {
-        showSection('dashboard');
-        updateDashboard();
-    } else {
-        showSection('home');
-    }
-    
-    // Populate courses from database
-    renderCourses();
-    
-    // Set up event listeners
-    setupEventListeners();
-}
+// Initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', init);

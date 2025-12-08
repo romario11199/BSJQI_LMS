@@ -1,9 +1,8 @@
 const sql = require('mssql');
 
-// Load environment variables if present
 require('dotenv').config();
 
-// Build DB config preferring explicit host+port when provided, otherwise use named instance
+
 const serverHost = process.env.DB_SERVER || process.env.DB_SERVER_HOST || 'DESKTOP-P6M5VIB';
 const serverPort = process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : null;
 const instanceName = process.env.DB_INSTANCE || null;
@@ -26,12 +25,10 @@ const dbConfig = {
     }
 };
 
-// If a port was not provided but an instance name exists, set options.instanceName
 if (!serverPort && instanceName) {
     dbConfig.options.instanceName = instanceName;
 }
 
-// If port is explicitly provided, ensure instanceName is not set (port takes precedence)
 if (serverPort && dbConfig.options.instanceName) {
     delete dbConfig.options.instanceName;
 }
@@ -47,14 +44,14 @@ async function initDb() {
         return _pool;
     } catch (err) {
         console.error('SQL Pool Connection Error:', err.message || err);
-        // Log stack and config to help troubleshooting
+        
         if (err && err.stack) console.error(err.stack);
         try {
             console.error('DB config server:', dbConfig.server, 'database:', dbConfig.database);
         } catch (e) {
-            // ignore
+        
         }
-        // Do not throw to allow server to start — return null so callers can handle
+        
         _pool = null;
         return null;
     }

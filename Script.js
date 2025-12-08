@@ -5,6 +5,7 @@ const API_BASE_URL = 'http://localhost:5500/api';
 let currentStudent = JSON.parse(localStorage.getItem('currentStudent')) || null;
 let currentInstructor = JSON.parse(localStorage.getItem('currentInstructor')) || null;
 let selectedCourse = null;
+let allLoadedCourses = []; // Store all courses loaded from database
 
 // Course data (fallback)
 const courses = [
@@ -198,6 +199,11 @@ function showSection(sectionId) {
             link.classList.add('active');
         }
     });
+    
+    // Load courses when showing the courses section
+    if (sectionId === 'courses') {
+        loadAndRenderCourses();
+    }
 }
 
 // ==================== INSTRUCTOR FUNCTIONS ====================
@@ -371,34 +377,65 @@ async function loadInstructorCourses() {
 
 // Load and render courses
 async function loadAndRenderCourses() {
-    if (!courseGrid) return;
-    
-    courseGrid.innerHTML = '<p>Loading courses...</p>';
-    
-    try {
-        const response = await fetch(`${API_BASE_URL}/courses`);
-        if (response.ok) {
-            const result = await response.json();
-            if (result.success) {
-                renderCourses(result.courses);
-                return;
-            }
-        }
-    } catch (error) {
-        console.log('Using fallback course data');
+    if (!courseGrid) {
+        console.error('❌ courseGrid element not found!');
+        return;
     }
     
-    // Use fallback data
+    courseGrid.innerHTML = '<p>Loading courses...</p>';
+    console.log('🔄 Starting to load courses from API...');
+    
+    try {
+        const apiUrl = `${API_BASE_URL}/courses`;
+        console.log('Fetching from:', apiUrl);
+        
+        const response = await fetch(apiUrl);
+        console.log('Response status:', response.status, response.ok ? '✅' : '❌');
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('API result:', result);
+            console.log('Courses received:', result.courses);
+            
+            if (result.success && result.courses && result.courses.length > 0) {
+                console.log(`✅ Successfully loaded ${result.courses.length} courses from database`);
+                console.log('Course details:', result.courses);
+                allLoadedCourses = result.courses; // Store courses globally
+                renderCourses(result.courses);
+                return;
+            } else {
+                console.warn('⚠️ API returned success:false or empty courses array');
+            }
+        } else {
+            const errorText = await response.text();
+            console.error('❌ API request failed:', response.status, errorText);
+        }
+    } catch (error) {
+        console.error('❌ Error fetching courses:', error);
+    }
+    
+    // Use fallback data only if API fails
+    console.log('⚠️ Falling back to hardcoded course data (3 courses)');
+    allLoadedCourses = courses; // Store fallback courses globally
     renderCourses(courses);
 }
 
 // Render courses
 function renderCourses(coursesData) {
-    if (!courseGrid) return;
+    console.log('📋 renderCourses called with:', coursesData);
+    console.log('Number of courses to render:', coursesData ? coursesData.length : 0);
+    
+    if (!courseGrid) {
+        console.error('❌ courseGrid not found in renderCourses!');
+        return;
+    }
     
     courseGrid.innerHTML = '';
+    console.log('✅ Cleared courseGrid, starting to render...');
     
-    coursesData.forEach(course => {
+    coursesData.forEach((course, index) => {
+        console.log(`Rendering course ${index + 1}:`, course.Title || course.title, course.CourseCode || course.id);
+        
         const courseCode = course.CourseCode || course.id;
         const courseCard = document.createElement('div');
         courseCard.className = 'course-card';
@@ -419,6 +456,8 @@ function renderCourses(coursesData) {
         
         courseGrid.appendChild(courseCard);
     });
+    
+    console.log(`✅ Finished rendering ${coursesData.length} course cards to the DOM`);
     
     // Add event listeners to enroll buttons
     document.querySelectorAll('.enroll-btn').forEach(button => {
@@ -519,12 +558,21 @@ async function handleLogin(e) {
 
 // Select course
 function selectCourse(courseCode) {
-    selectedCourse = courses.find(course => course.id === courseCode);
+    console.log('Looking for course:', courseCode);
+    console.log('Available courses:', allLoadedCourses);
+    
+    // Try to find in database courses first (using CourseCode)
+    selectedCourse = allLoadedCourses.find(course => 
+        (course.CourseCode && course.CourseCode === courseCode) || 
+        (course.id && course.id === courseCode)
+    );
     
     if (selectedCourse) {
+        console.log('Found course:', selectedCourse);
         showSection('payment');
         updatePaymentSummary();
     } else {
+        console.error('Course not found with code:', courseCode);
         alert('Course not found');
     }
 }
@@ -533,11 +581,14 @@ function selectCourse(courseCode) {
 function updatePaymentSummary() {
     if (!selectedCourse || !paymentSummary) return;
     
+    const courseTitle = selectedCourse.Title || selectedCourse.title;
+    const coursePrice = selectedCourse.Price || selectedCourse.price;
+    
     paymentSummary.innerHTML = `
         <h3>Order Summary</h3>
-        <p><strong>Course:</strong> ${selectedCourse.title}</p>
-        <p><strong>Price:</strong> JMD$${selectedCourse.price.toFixed(2)}</p>
-        <p><strong>Total:</strong> JMD$${selectedCourse.price.toFixed(2)}</p>
+        <p><strong>Course:</strong> ${courseTitle}</p>
+        <p><strong>Price:</strong> JMD$${coursePrice.toFixed(2)}</p>
+        <p><strong>Total:</strong> JMD$${coursePrice.toFixed(2)}</p>
     `;
 }
 
@@ -555,12 +606,14 @@ async function handlePayment(e) {
         const paymentMethod = selectedPaymentMethod ? 
             selectedPaymentMethod.getAttribute('data-method') : 'credit-card';
         
+        const courseCode = selectedCourse.CourseCode || selectedCourse.id;
+        
         const response = await fetch(`${API_BASE_URL}/enroll`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                StudentID: currentStudent.id,
-                courseCode: selectedCourse.id,
+                StudentID: currentStudent.StudentID || currentStudent.id,
+                courseCode: courseCode,
                 paymentMethod: paymentMethod
             })
         });
@@ -597,7 +650,7 @@ async function updateDashboard() {
     
     // Load enrolled courses
     try {
-        const response = await fetch(`${API_BASE_URL}/dashboard/${currentStudent.id}`);
+        const response = await fetch(`${API_BASE_URL}/dashboard/${currentStudent.StudentID || currentStudent.id}`);
         const result = await response.json();
         
         const enrolledList = document.querySelector('.course-list');
@@ -617,12 +670,137 @@ async function updateDashboard() {
                         <button class="access-course" data-course="${course.courseCode}">Access Course</button>
                     </div>
                 `).join('');
+                
+                // Add event listeners to Access Course buttons
+                document.querySelectorAll('.access-course').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const courseCode = e.target.getAttribute('data-course');
+                        console.log('Accessing course:', courseCode);
+                        
+                        // Update course progress
+                        updateCourseProgress(courseCode);
+                    });
+                });
+                
+                // Update Progress tab
+                updateProgressTab(result.enrollments);
             } else {
                 enrolledList.innerHTML = '<p>You are not enrolled in any courses yet.</p>';
+                
+                // Clear progress tab
+                const progressDetails = document.getElementById('progress-details');
+                if (progressDetails) {
+                    progressDetails.innerHTML = '<p>No courses enrolled yet.</p>';
+                }
             }
         }
     } catch (error) {
         console.error('Error updating dashboard:', error);
+    }
+}
+
+// Update Progress Tab
+function updateProgressTab(enrollments) {
+    const progressDetails = document.getElementById('progress-details');
+    if (!progressDetails) return;
+    
+    if (!enrollments || enrollments.length === 0) {
+        progressDetails.innerHTML = '<p>No courses enrolled yet.</p>';
+        return;
+    }
+    
+    // Calculate statistics
+    const totalCourses = enrollments.length;
+    const completedCourses = enrollments.filter(c => c.isCompleted).length;
+    const inProgressCourses = enrollments.filter(c => !c.isCompleted && c.progressPercentage > 0).length;
+    const notStartedCourses = enrollments.filter(c => c.progressPercentage === 0).length;
+    const averageProgress = Math.round(
+        enrollments.reduce((sum, c) => sum + (c.progressPercentage || 0), 0) / totalCourses
+    );
+    
+    progressDetails.innerHTML = `
+        <div class="progress-summary">
+            <h4>Overall Statistics</h4>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">${totalCourses}</div>
+                    <div class="stat-label">Total Courses</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${completedCourses}</div>
+                    <div class="stat-label">Completed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${inProgressCourses}</div>
+                    <div class="stat-label">In Progress</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${notStartedCourses}</div>
+                    <div class="stat-label">Not Started</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${averageProgress}%</div>
+                    <div class="stat-label">Average Progress</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="course-progress-list">
+            <h4>Course Details</h4>
+            ${enrollments.map(course => `
+                <div class="progress-item">
+                    <div class="progress-item-header">
+                        <h5>${course.title}</h5>
+                        <span class="progress-badge ${course.isCompleted ? 'completed' : course.progressPercentage > 0 ? 'in-progress' : 'not-started'}">
+                            ${course.isCompleted ? 'Completed' : course.progressPercentage > 0 ? 'In Progress' : 'Not Started'}
+                        </span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar">
+                            <div class="progress" style="width: ${course.progressPercentage || 0}%"></div>
+                        </div>
+                        <span class="progress-text">${course.progressPercentage || 0}%</span>
+                    </div>
+                    <div class="progress-item-meta">
+                        <span>Instructor: ${course.instructorName}</span>
+                        <span>Enrolled: ${new Date(course.enrollmentDate).toLocaleDateString()}</span>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// Update course progress
+async function updateCourseProgress(courseCode) {
+    if (!currentStudent) {
+        alert('Please login first');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/update-progress`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                StudentID: currentStudent.StudentID || currentStudent.id,
+                courseCode: courseCode,
+                progressIncrement: 10 // Increment by 10% each time
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert(`Course progress updated to ${result.progressPercentage}%!`);
+            // Refresh dashboard to show updated progress
+            updateDashboard();
+        } else {
+            alert('Failed to update progress: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error updating progress:', error);
+        alert('Error updating course progress');
     }
 }
 

@@ -78,6 +78,7 @@ app.get('/api/courses', async (req, res) => {
             Category: r.Category
         }));
 
+        console.log(`Returning ${courses.length} active courses from database`);
         res.json({ success: true, courses });
     } catch (error) {
         console.error('Courses error:', error.message || error);
@@ -150,13 +151,16 @@ app.post('/api/register', async (req, res) => {
             });
         }
 
-        // STEP 2 â€” fresh request
+        // Hash the password before storing
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // STEP 2 â€" fresh request
         const insertReq = pool.request();
         const insertResult = await insertReq
             .input('FirstName', sql.NVarChar(100), firstName)
             .input('LastName', sql.NVarChar(100), lastName)
             .input('Email', sql.NVarChar(255), email)
-            .input('PasswordHash', sql.NVarChar(255), password)
+            .input('PasswordHash', sql.NVarChar(255), hashedPassword)
             .query(`
                 INSERT INTO Students (FirstName, LastName, Email, PasswordHash)
                 OUTPUT INSERTED.StudentID AS StudentID
@@ -342,10 +346,9 @@ app.get('/api/instructor/:instructorId/stats', async (req, res) => {
         const instructorId = req.params.instructorId;
         const pool = db.getPool();
         if (!pool) throw new Error('DB pool not initialized');
-        const request = pool.request();
 
         // Get total courses taught by this instructor
-        const coursesResult = await request
+        const coursesResult = await pool.request()
             .input('InstructorID', sql.Int, instructorId)
             .query(`
                 SELECT COUNT(*) as TotalCourses
@@ -354,7 +357,7 @@ app.get('/api/instructor/:instructorId/stats', async (req, res) => {
             `);
 
         // Get total students enrolled in instructor's courses
-        const studentsResult = await request
+        const studentsResult = await pool.request()
             .input('InstructorID', sql.Int, instructorId)
             .query(`
                 SELECT COUNT(DISTINCT ce.StudentID) as TotalStudents
@@ -364,7 +367,7 @@ app.get('/api/instructor/:instructorId/stats', async (req, res) => {
             `);
 
         // Get average progress for instructor's courses
-        const progressResult = await request
+        const progressResult = await pool.request()
             .input('InstructorID', sql.Int, instructorId)
             .query(`
                 SELECT AVG(ce.ProgressPercentage) as AverageProgress
@@ -374,7 +377,7 @@ app.get('/api/instructor/:instructorId/stats', async (req, res) => {
             `);
 
         // Get total revenue from instructor's courses
-        const revenueResult = await request
+        const revenueResult = await pool.request()
             .input('InstructorID', sql.Int, instructorId)
             .query(`
                 SELECT SUM(ce.AmountPaid) as TotalRevenue
@@ -384,7 +387,7 @@ app.get('/api/instructor/:instructorId/stats', async (req, res) => {
             `);
 
         // Get progress breakdown
-        const breakdownResult = await request
+        const breakdownResult = await pool.request()
             .input('InstructorID', sql.Int, instructorId)
             .query(`
                 SELECT 
@@ -401,14 +404,14 @@ app.get('/api/instructor/:instructorId/stats', async (req, res) => {
             TotalStudents: studentsResult.recordset[0]?.TotalStudents || 0,
             AverageProgress: Math.round(progressResult.recordset[0]?.AverageProgress || 0),
             TotalRevenue: revenueResult.recordset[0]?.TotalRevenue || 0,
-            NotStartedStudents: breakdownResult.recordset[0]?.NotStartedStudents || 0,
-            InProgressStudents: breakdownResult.recordset[0]?.InProgressStudents || 0,
-            CompletedStudents: breakdownResult.recordset[0]?.CompletedStudents || 0
+            NotStarted: breakdownResult.recordset[0]?.NotStartedStudents || 0,
+            InProgress: breakdownResult.recordset[0]?.InProgressStudents || 0,
+            Completed: breakdownResult.recordset[0]?.CompletedStudents || 0
         };
 
         res.json({ 
             success: true, 
-            stats: stats 
+            data: stats 
         });
 
     } catch (error) {
@@ -460,13 +463,13 @@ app.get('/api/instructor/:instructorId/courses', async (req, res) => {
             DurationWeeks: course.DurationWeeks,
             Category: course.Category,
             InstructorName: course.InstructorName,
-            TotalEnrollments: course.TotalEnrollments,
+            EnrolledStudents: course.TotalEnrollments,
             AverageProgress: Math.round(course.AverageProgress || 0)
         }));
 
         res.json({ 
             success: true, 
-            courses: courses 
+            data: courses 
         });
 
     } catch (error) {
@@ -812,6 +815,29 @@ app.get('/api/debug/instructor', async (req, res) => {
         res.json({ success: true, record: result.recordset[0] || null });
     } catch (err) {
         console.error('Debug instructor error:', err.message || err);
+        res.status(500).json({ success: false, message: err.message || err });
+    }
+});
+
+// Debug: fetch ALL courses (including inactive) to see what's in the database
+app.get('/api/debug/all-courses', async (req, res) => {
+    try {
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+        const result = await pool.request().query(`
+            SELECT CourseID, CourseCode, Title, Description, Price, DurationWeeks, InstructorName, Category, IsActive
+            FROM Courses
+            ORDER BY CourseCode
+        `);
+        res.json({ 
+            success: true, 
+            totalCourses: result.recordset.length,
+            activeCourses: result.recordset.filter(c => c.IsActive).length,
+            inactiveCourses: result.recordset.filter(c => !c.IsActive).length,
+            courses: result.recordset 
+        });
+    } catch (err) {
+        console.error('Debug all courses error:', err.message || err);
         res.status(500).json({ success: false, message: err.message || err });
     }
 });

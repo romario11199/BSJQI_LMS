@@ -538,6 +538,419 @@ app.get('/api/instructor/:instructorId/students', async (req, res) => {
     }
 });
 
+// ==================== ADMINISTRATOR AUTHENTICATION ====================
+
+// Administrator login
+app.post('/api/admin/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        console.log('Administrator login attempt for:', email);
+
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+        const request = pool.request();
+
+        // Fetch administrator by email
+        const result = await request
+            .input('Email', sql.NVarChar(255), email)
+            .query(`
+                SELECT AdminID, FirstName, LastName, Email, Role, PasswordHash, IsActive
+                FROM Administrators
+                WHERE Email = @Email AND IsActive = 1
+            `);
+
+        if (!result.recordset || result.recordset.length === 0) {
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Invalid administrator email or account inactive' 
+            });
+        }
+
+        const admin = result.recordset[0];
+        const storedHash = admin.PasswordHash || '';
+
+        let passwordMatches = false;
+        
+        // Check if it's a bcrypt hash or plain text
+        if (typeof storedHash === 'string' && storedHash.startsWith('$2')) {
+            passwordMatches = await bcrypt.compare(password, storedHash);
+        } else {
+            // For plain text passwords (demo/testing)
+            passwordMatches = (password === storedHash);
+        }
+
+        if (!passwordMatches) {
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Invalid password' 
+            });
+        }
+
+        // Update last login time
+        try {
+            await pool.request()
+                .input('AdminID', sql.Int, admin.AdminID)
+                .query(`
+                    UPDATE Administrators 
+                    SET LastLogin = GETDATE() 
+                    WHERE AdminID = @AdminID
+                `);
+        } catch (err) {
+            console.log('Note: LastLogin column might not exist:', err.message);
+        }
+
+        res.json({
+            success: true,
+            admin: {
+                AdminID: admin.AdminID,
+                fullName: `${admin.FirstName} ${admin.LastName}`,
+                firstName: admin.FirstName,
+                lastName: admin.LastName,
+                email: admin.Email,
+                role: admin.Role
+            },
+            message: 'Administrator login successful'
+        });
+
+    } catch (error) {
+        console.error('Administrator login error:', error.message || error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message || 'Server error' 
+        });
+    }
+});
+
+// Get administrator dashboard stats
+app.get('/api/admin/stats', async (req, res) => {
+    try {
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+
+        // Get total courses
+        const coursesResult = await pool.request().query(`
+            SELECT COUNT(*) as TotalCourses FROM Courses WHERE IsActive = 1
+        `);
+
+        // Get total students
+        const studentsResult = await pool.request().query(`
+            SELECT COUNT(*) as TotalStudents FROM Students WHERE IsActive = 1
+        `);
+
+        // Get total instructors
+        const instructorsResult = await pool.request().query(`
+            SELECT COUNT(*) as TotalInstructors FROM Instructors WHERE IsActive = 1
+        `);
+
+        // Get total enrollments
+        const enrollmentsResult = await pool.request().query(`
+            SELECT COUNT(*) as TotalEnrollments FROM CourseEnrollments
+        `);
+
+        // Get total revenue
+        const revenueResult = await pool.request().query(`
+            SELECT SUM(AmountPaid) as TotalRevenue FROM CourseEnrollments
+        `);
+
+        const stats = {
+            TotalCourses: coursesResult.recordset[0]?.TotalCourses || 0,
+            TotalStudents: studentsResult.recordset[0]?.TotalStudents || 0,
+            TotalInstructors: instructorsResult.recordset[0]?.TotalInstructors || 0,
+            TotalEnrollments: enrollmentsResult.recordset[0]?.TotalEnrollments || 0,
+            TotalRevenue: revenueResult.recordset[0]?.TotalRevenue || 0
+        };
+
+        res.json({ 
+            success: true, 
+            data: stats 
+        });
+
+    } catch (error) {
+        console.error('Admin stats error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
+
+// Create new course (Admin only)
+app.post('/api/admin/courses', async (req, res) => {
+    try {
+        const { courseCode, title, description, price, durationWeeks, instructorId, category } = req.body;
+        
+        if (!courseCode || !title || !price || !instructorId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Course code, title, price, and instructor are required'
+            });
+        }
+
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+
+        // Get instructor name
+        const instructorResult = await pool.request()
+            .input('InstructorID', sql.Int, instructorId)
+            .query(`
+                SELECT FirstName, LastName FROM Instructors 
+                WHERE InstructorID = @InstructorID AND IsActive = 1
+            `);
+
+        if (instructorResult.recordset.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid instructor ID'
+            });
+        }
+
+        const instructor = instructorResult.recordset[0];
+        const instructorName = `${instructor.FirstName} ${instructor.LastName}`;
+
+        // Check if course code already exists
+        const existingCourse = await pool.request()
+            .input('CourseCode', sql.NVarChar(20), courseCode)
+            .query(`SELECT CourseID FROM Courses WHERE CourseCode = @CourseCode`);
+
+        if (existingCourse.recordset.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Course code already exists'
+            });
+        }
+
+        // Insert new course
+        const result = await pool.request()
+            .input('CourseCode', sql.NVarChar(20), courseCode)
+            .input('Title', sql.NVarChar(200), title)
+            .input('Description', sql.NVarChar(sql.MAX), description || '')
+            .input('Price', sql.Decimal(10, 2), price)
+            .input('DurationWeeks', sql.Int, durationWeeks || 1)
+            .input('InstructorID', sql.Int, instructorId)
+            .input('InstructorName', sql.NVarChar(200), instructorName)
+            .input('Category', sql.NVarChar(100), category || 'General')
+            .query(`
+                INSERT INTO Courses (CourseCode, Title, Description, Price, DurationWeeks, InstructorID, InstructorName, Category)
+                OUTPUT INSERTED.CourseID
+                VALUES (@CourseCode, @Title, @Description, @Price, @DurationWeeks, @InstructorID, @InstructorName, @Category)
+            `);
+
+        res.json({
+            success: true,
+            courseId: result.recordset[0].CourseID,
+            message: 'Course created successfully'
+        });
+
+    } catch (error) {
+        console.error('Create course error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// Update course (Admin only)
+app.put('/api/admin/courses/:courseId', async (req, res) => {
+    try {
+        const courseId = req.params.courseId;
+        const { title, description, price, durationWeeks, instructorId, category } = req.body;
+
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+
+        // Build dynamic update query
+        let updateFields = [];
+        let request = pool.request();
+        request.input('CourseID', sql.Int, courseId);
+
+        if (title !== undefined) {
+            updateFields.push('Title = @Title');
+            request.input('Title', sql.NVarChar(200), title);
+        }
+        if (description !== undefined) {
+            updateFields.push('Description = @Description');
+            request.input('Description', sql.NVarChar(sql.MAX), description);
+        }
+        if (price !== undefined) {
+            updateFields.push('Price = @Price');
+            request.input('Price', sql.Decimal(10, 2), price);
+        }
+        if (durationWeeks !== undefined) {
+            updateFields.push('DurationWeeks = @DurationWeeks');
+            request.input('DurationWeeks', sql.Int, durationWeeks);
+        }
+        if (category !== undefined) {
+            updateFields.push('Category = @Category');
+            request.input('Category', sql.NVarChar(100), category);
+        }
+        if (instructorId !== undefined) {
+            // Get instructor name
+            const instructorResult = await pool.request()
+                .input('InstructorID', sql.Int, instructorId)
+                .query(`
+                    SELECT FirstName, LastName FROM Instructors 
+                    WHERE InstructorID = @InstructorID AND IsActive = 1
+                `);
+
+            if (instructorResult.recordset.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid instructor ID'
+                });
+            }
+
+            const instructor = instructorResult.recordset[0];
+            const instructorName = `${instructor.FirstName} ${instructor.LastName}`;
+            
+            updateFields.push('InstructorID = @InstructorID');
+            updateFields.push('InstructorName = @InstructorName');
+            request.input('InstructorID', sql.Int, instructorId);
+            request.input('InstructorName', sql.NVarChar(200), instructorName);
+        }
+
+        if (updateFields.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No fields to update'
+            });
+        }
+
+        const query = `UPDATE Courses SET ${updateFields.join(', ')} WHERE CourseID = @CourseID`;
+        await request.query(query);
+
+        res.json({
+            success: true,
+            message: 'Course updated successfully'
+        });
+
+    } catch (error) {
+        console.error('Update course error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// Delete course (Admin only - soft delete)
+app.delete('/api/admin/courses/:courseId', async (req, res) => {
+    try {
+        const courseId = req.params.courseId;
+
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+
+        // Soft delete - set IsActive to 0
+        await pool.request()
+            .input('CourseID', sql.Int, courseId)
+            .query(`UPDATE Courses SET IsActive = 0 WHERE CourseID = @CourseID`);
+
+        res.json({
+            success: true,
+            message: 'Course deleted successfully'
+        });
+
+    } catch (error) {
+        console.error('Delete course error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// Get all instructors for dropdown (Admin only)
+app.get('/api/admin/instructors', async (req, res) => {
+    try {
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+
+        const result = await pool.request().query(`
+            SELECT InstructorID, FirstName, LastName, Email, Department
+            FROM Instructors
+            WHERE IsActive = 1
+            ORDER BY FirstName, LastName
+        `);
+
+        const instructors = result.recordset.map(i => ({
+            InstructorID: i.InstructorID,
+            FullName: `${i.FirstName} ${i.LastName}`,
+            Email: i.Email,
+            Department: i.Department
+        }));
+
+        res.json({
+            success: true,
+            data: instructors
+        });
+
+    } catch (error) {
+        console.error('Get instructors error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// Get all courses including inactive (Admin only)
+app.get('/api/admin/courses', async (req, res) => {
+    try {
+        const pool = db.getPool();
+        if (!pool) throw new Error('DB pool not initialized');
+
+        const result = await pool.request().query(`
+            SELECT 
+                c.CourseID,
+                c.CourseCode,
+                c.Title,
+                c.Description,
+                c.Price,
+                c.DurationWeeks,
+                c.InstructorID,
+                c.InstructorName,
+                c.Category,
+                c.IsActive,
+                COUNT(ce.EnrollmentID) as TotalEnrollments
+            FROM Courses c
+            LEFT JOIN CourseEnrollments ce ON c.CourseID = ce.CourseID
+            GROUP BY 
+                c.CourseID, c.CourseCode, c.Title, c.Description, 
+                c.Price, c.DurationWeeks, c.InstructorID, c.InstructorName, 
+                c.Category, c.IsActive
+            ORDER BY c.CourseCode
+        `);
+
+        const courses = result.recordset.map(course => ({
+            CourseID: course.CourseID,
+            CourseCode: course.CourseCode,
+            Title: course.Title,
+            Description: course.Description,
+            Price: course.Price,
+            DurationWeeks: course.DurationWeeks,
+            InstructorID: course.InstructorID,
+            InstructorName: course.InstructorName,
+            Category: course.Category,
+            IsActive: course.IsActive,
+            TotalEnrollments: course.TotalEnrollments
+        }));
+
+        res.json({
+            success: true,
+            data: courses
+        });
+
+    } catch (error) {
+        console.error('Get courses error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
 // Enroll in course
 app.post('/api/enroll', async (req, res) => {
     try {

@@ -4,8 +4,10 @@ const API_BASE_URL = 'http://localhost:5500/api';
 // Global state
 let currentStudent = JSON.parse(localStorage.getItem('currentStudent')) || null;
 let currentInstructor = JSON.parse(localStorage.getItem('currentInstructor')) || null;
+let currentAdmin = JSON.parse(localStorage.getItem('currentAdmin')) || null;
 let selectedCourse = null;
 let allLoadedCourses = []; // Store all courses loaded from database
+let allInstructors = []; // Store all instructors for dropdown
 
 // Course data (fallback)
 const courses = [
@@ -57,6 +59,19 @@ const instructorLoginSection = document.getElementById('instructor-login-section
 const instructorDashboardContent = document.getElementById('instructor-dashboard-content');
 const instructorNameSpan = document.getElementById('instructor-name');
 
+// Administrator elements
+const adminLoginForm = document.getElementById('admin-login-form');
+const adminNavBtns = document.querySelectorAll('.admin-nav-btn');
+const adminViews = document.querySelectorAll('.admin-view');
+const adminLogoutBtn = document.getElementById('admin-logout-btn');
+const adminLoginSection = document.getElementById('admin-login-section');
+const adminDashboardContent = document.getElementById('admin-dashboard-content');
+const adminNameSpan = document.getElementById('admin-name');
+const courseForm = document.getElementById('course-form');
+const addCourseBtn = document.getElementById('add-course-btn');
+const cancelCourseBtn = document.getElementById('cancel-course-btn');
+const courseFormContainer = document.getElementById('course-form-container');
+
 // Initialize application
 function init() {
     console.log('Initializing application...');
@@ -69,6 +84,10 @@ function init() {
     // Check if instructor is logged in
     else if (currentInstructor) {
         showInstructorDashboard();
+    }
+    // Check if admin is logged in
+    else if (currentAdmin) {
+        showAdminDashboard();
     }
     // No one is logged in
     else {
@@ -175,6 +194,39 @@ function setupEventListeners() {
             showInstructorView(viewId);
         });
     });
+    
+    // Administrator login form
+    if (adminLoginForm) {
+        adminLoginForm.addEventListener('submit', handleAdminLogin);
+    }
+    
+    // Administrator logout button
+    if (adminLogoutBtn) {
+        adminLogoutBtn.addEventListener('click', handleAdminLogout);
+    }
+    
+    // Administrator navigation buttons
+    adminNavBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const viewId = e.target.getAttribute('data-target');
+            showAdminView(viewId);
+        });
+    });
+    
+    // Add course button
+    if (addCourseBtn) {
+        addCourseBtn.addEventListener('click', showAddCourseForm);
+    }
+    
+    // Cancel course button
+    if (cancelCourseBtn) {
+        cancelCourseBtn.addEventListener('click', hideCourseForm);
+    }
+    
+    // Course form submit
+    if (courseForm) {
+        courseForm.addEventListener('submit', handleCourseFormSubmit);
+    }
 }
 
 // Show section
@@ -810,6 +862,350 @@ function logoutStudent() {
     localStorage.removeItem('currentStudent');
     showSection('home');
     alert('Logged out successfully.');
+}
+
+// ==================== ADMINISTRATOR FUNCTIONS ====================
+
+// Handle administrator login
+async function handleAdminLogin(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const email = formData.get('email').trim();
+    const password = formData.get('password').trim();
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            currentAdmin = {
+                id: result.admin.AdminID,
+                email: result.admin.email,
+                fullName: result.admin.fullName,
+                role: result.admin.role
+            };
+            
+            localStorage.setItem('currentAdmin', JSON.stringify(currentAdmin));
+            
+            showAdminDashboard();
+            await loadAdminData();
+            e.target.reset();
+        } else {
+            alert(result.message || 'Login failed. Please check your credentials.');
+        }
+    } catch (error) {
+        console.error('Admin login error:', error);
+        alert('Login failed due to a server error. Please try again.');
+    }
+}
+
+// Show administrator dashboard
+function showAdminDashboard() {
+    if (!currentAdmin) return;
+    
+    if (adminLoginSection) {
+        adminLoginSection.style.display = 'none';
+    }
+    
+    if (adminDashboardContent) {
+        adminDashboardContent.style.display = 'block';
+    }
+    
+    if (adminNameSpan) {
+        adminNameSpan.textContent = currentAdmin.fullName;
+    }
+    
+    showSection('admin-dashboard');
+    loadAdminData();
+}
+
+// Handle administrator logout
+function handleAdminLogout() {
+    currentAdmin = null;
+    localStorage.removeItem('currentAdmin');
+    
+    if (adminLoginSection) {
+        adminLoginSection.style.display = 'block';
+    }
+    
+    if (adminDashboardContent) {
+        adminDashboardContent.style.display = 'none';
+    }
+    
+    showSection('home');
+    alert('Administrator logged out successfully.');
+}
+
+// Load administrator data
+async function loadAdminData() {
+    if (!currentAdmin) return;
+    
+    try {
+        // Load stats
+        const statsResponse = await fetch(`${API_BASE_URL}/admin/stats`);
+        const statsResult = await statsResponse.json();
+        
+        if (statsResult.success && statsResult.data) {
+            const data = statsResult.data;
+            
+            document.getElementById('admin-stat-courses').textContent = data.TotalCourses || 0;
+            document.getElementById('admin-stat-students').textContent = data.TotalStudents || 0;
+            document.getElementById('admin-stat-instructors').textContent = data.TotalInstructors || 0;
+            document.getElementById('admin-stat-enrollments').textContent = data.TotalEnrollments || 0;
+            document.getElementById('admin-stat-revenue').textContent = `JMD$${(data.TotalRevenue || 0).toLocaleString()}`;
+        }
+        
+        // Load instructors for dropdown
+        await loadInstructors();
+        
+        // Load courses
+        await loadAdminCourses();
+        
+    } catch (error) {
+        console.error('Error loading admin data:', error);
+    }
+}
+
+// Show administrator view
+function showAdminView(viewId) {
+    adminNavBtns.forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.getAttribute('data-target') === viewId) {
+            btn.classList.add('active');
+        }
+    });
+    
+    adminViews.forEach(view => {
+        view.style.display = 'none';
+        if (view.id === `admin-${viewId}`) {
+            view.style.display = 'block';
+        }
+    });
+    
+    if (viewId === 'courses') {
+        loadAdminCourses();
+    }
+}
+
+// Load instructors for dropdown
+async function loadInstructors() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/instructors`);
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+            allInstructors = result.data;
+            
+            const instructorSelect = document.getElementById('course-instructor');
+            if (instructorSelect) {
+                instructorSelect.innerHTML = '<option value="">Select Instructor</option>' +
+                    result.data.map(i => `<option value="${i.InstructorID}">${i.FullName} - ${i.Department || 'N/A'}</option>`).join('');
+            }
+        }
+    } catch (error) {
+        console.error('Error loading instructors:', error);
+    }
+}
+
+// Load admin courses
+async function loadAdminCourses() {
+    if (!currentAdmin) return;
+    
+    try {
+        const coursesList = document.getElementById('admin-courses-list');
+        if (!coursesList) return;
+        
+        const response = await fetch(`${API_BASE_URL}/admin/courses`);
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+            coursesList.innerHTML = `
+                <table class="courses-table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Title</th>
+                            <th>Instructor</th>
+                            <th>Price</th>
+                            <th>Duration</th>
+                            <th>Enrollments</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${result.data.map(course => `
+                            <tr class="${!course.IsActive ? 'inactive-course' : ''}">
+                                <td>${course.CourseCode}</td>
+                                <td>${course.Title}</td>
+                                <td>${course.InstructorName}</td>
+                                <td>JMD$${(course.Price || 0).toLocaleString()}</td>
+                                <td>${course.DurationWeeks} weeks</td>
+                                <td>${course.TotalEnrollments || 0}</td>
+                                <td>
+                                    <span class="status-badge ${course.IsActive ? 'active' : 'inactive'}">
+                                        ${course.IsActive ? 'Active' : 'Inactive'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn-small edit-course-btn" data-course-id="${course.CourseID}">Edit</button>
+                                    ${course.IsActive ? 
+                                        `<button class="btn-small btn-danger delete-course-btn" data-course-id="${course.CourseID}">Delete</button>` :
+                                        `<span class="text-muted">Deleted</span>`
+                                    }
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            // Add event listeners to edit and delete buttons
+            document.querySelectorAll('.edit-course-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const courseId = e.target.getAttribute('data-course-id');
+                    editCourse(courseId, result.data);
+                });
+            });
+            
+            document.querySelectorAll('.delete-course-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const courseId = e.target.getAttribute('data-course-id');
+                    deleteCourse(courseId);
+                });
+            });
+        } else {
+            coursesList.innerHTML = '<p>No courses found.</p>';
+        }
+    } catch (error) {
+        console.error('Error loading admin courses:', error);
+    }
+}
+
+// Show add course form
+function showAddCourseForm() {
+    if (courseFormContainer) {
+        courseFormContainer.style.display = 'block';
+        document.getElementById('course-form-title').textContent = 'Add New Course';
+        courseForm.reset();
+        document.getElementById('course-id').value = '';
+        document.getElementById('course-code').disabled = false;
+    }
+}
+
+// Hide course form
+function hideCourseForm() {
+    if (courseFormContainer) {
+        courseFormContainer.style.display = 'none';
+        courseForm.reset();
+    }
+}
+
+// Handle course form submit
+async function handleCourseFormSubmit(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const courseId = formData.get('courseId');
+    
+    const courseData = {
+        courseCode: formData.get('courseCode'),
+        title: formData.get('title'),
+        description: formData.get('description'),
+        price: parseFloat(formData.get('price')),
+        durationWeeks: parseInt(formData.get('durationWeeks')),
+        instructorId: parseInt(formData.get('instructorId')),
+        category: formData.get('category')
+    };
+    
+    try {
+        let response;
+        if (courseId) {
+            // Update existing course
+            response = await fetch(`${API_BASE_URL}/admin/courses/${courseId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(courseData)
+            });
+        } else {
+            // Create new course
+            response = await fetch(`${API_BASE_URL}/admin/courses`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(courseData)
+            });
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert(courseId ? 'Course updated successfully!' : 'Course created successfully!');
+            hideCourseForm();
+            await loadAdminCourses();
+            await loadAndRenderCourses(); // Refresh public course list
+        } else {
+            alert('Error: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Course form error:', error);
+        alert('Failed to save course. Please try again.');
+    }
+}
+
+// Edit course
+function editCourse(courseId, coursesData) {
+    const course = coursesData.find(c => c.CourseID == courseId);
+    if (!course) return;
+    
+    if (courseFormContainer) {
+        courseFormContainer.style.display = 'block';
+        document.getElementById('course-form-title').textContent = 'Edit Course';
+        
+        document.getElementById('course-id').value = course.CourseID;
+        document.getElementById('course-code').value = course.CourseCode;
+        document.getElementById('course-code').disabled = true; // Don't allow changing course code
+        document.getElementById('course-title').value = course.Title;
+        document.getElementById('course-description').value = course.Description || '';
+        document.getElementById('course-price').value = course.Price;
+        document.getElementById('course-duration').value = course.DurationWeeks;
+        document.getElementById('course-instructor').value = course.InstructorID;
+        document.getElementById('course-category').value = course.Category || '';
+        
+        // Scroll to form
+        courseFormContainer.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+// Delete course
+async function deleteCourse(courseId) {
+    if (!confirm('Are you sure you want to delete this course? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/courses/${courseId}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('Course deleted successfully!');
+            await loadAdminCourses();
+            await loadAndRenderCourses(); // Refresh public course list
+        } else {
+            alert('Error: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Delete course error:', error);
+        alert('Failed to delete course. Please try again.');
+    }
 }
 
 // Initialize when DOM is loaded

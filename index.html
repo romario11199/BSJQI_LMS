@@ -19,6 +19,7 @@
                     <li><a href="#" class="nav-link" data-target="courses">Courses</a></li>
                     <li><a href="#" class="nav-link" data-target="login"> Student Login</a></li>
                     <li><a href="#" class="nav-link" data-target="instructor-dashboard">Instructor</a></li>
+                    <li><a href="#" class="nav-link" data-target="admin-dashboard">Administrator</a></li>
                 </ul>
             </nav>
         </div>
@@ -147,7 +148,7 @@
             <h2 class="section-title">Student Login</h2>
             <form id="login-form">
                 <div class="form-group">
-                    <label for="login-email">Email Address</label>
+                    <label for="login-email">Email</label>
                     <input type="email" id="login-email" name="email" required>
                 </div>
                 
@@ -216,16 +217,15 @@
                     <h3>Instructor Login</h3>
                     <form id="instructor-login-form">
                         <div class="form-group">
-                            <label for="instructor-email">Instructor Email</label>
+                            <label for="instructor-email">Email</label>
                             <input type="email" id="instructor-email" name="email" placeholder="john@instructor.com" required>
                         </div>
                         <div class="form-group">
                             <label for="instructor-password">Password</label>
-                            <input type="password" id="instructor-password" name="password" placeholder="instructor123" required>
+                            <input type="password" id="instructor-password" name="password" placeholder="instructor124" required>
                         </div>
                         <button type="submit" class="btn-primary">Login as Instructor</button>
                     </form>
-                    <p class="text-muted">Demo credentials: john@instructor.com / instructor123</p>
                 </div>
                 
                 <!-- Instructor Dashboard Content (hidden by default) -->
@@ -285,6 +285,135 @@
                         <h4>My Courses</h4>
                         <div id="instructor-courses-list" class="courses-list">
                             <!-- Courses will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Administrator Dashboard Section -->
+        <section id="admin-dashboard" class="section">
+            <div class="container">
+                <h2 class="section-title">Administrator Dashboard</h2>
+                
+                <!-- Admin Login Form -->
+                <div id="admin-login-section">
+                    <h3>Administrator Login</h3>
+                    <form id="admin-login-form">
+                        <div class="form-group">
+                            <label for="admin-email">Email</label>
+                            <input type="email" id="admin-email" name="email" placeholder="Administrator@bsj.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-password">Password</label>
+                            <input type="password" id="admin-password" name="password" placeholder="Administrator123" required>
+                        </div>
+                        <button type="submit" class="btn-primary">Login as Administrator</button>
+                    </form>
+                </div>
+                
+                <!-- Admin Dashboard Content (hidden by default) -->
+                <div id="admin-dashboard-content" style="display: none;">
+                    <div class="instructor-toolbar">
+                        <div class="instructor-greeting">
+                            <h3>Welcome, Administrator <span id="admin-name"></span>!</h3>
+                        </div>
+                        <div class="instructor-actions">
+                            <button class="admin-nav-btn active" data-target="overview">Overview</button>
+                            <button class="admin-nav-btn" data-target="courses">Manage Courses</button>
+                            <button id="admin-logout-btn" class="btn-secondary">Logout</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Overview View -->
+                    <div id="admin-overview" class="admin-view active">
+                        <div class="stats-section">
+                            <h4 class="section-subtitle">System Overview</h4>
+                            <div class="stats-grid">
+                                <div class="stat-card">
+                                    <div class="stat-label">Total Courses</div>
+                                    <div id="admin-stat-courses" class="stat-number">0</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">Total Students</div>
+                                    <div id="admin-stat-students" class="stat-number">0</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">Total Instructors</div>
+                                    <div id="admin-stat-instructors" class="stat-number">0</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">Total Enrollments</div>
+                                    <div id="admin-stat-enrollments" class="stat-number">0</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">Total Revenue</div>
+                                    <div id="admin-stat-revenue" class="stat-number">$0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Manage Courses View -->
+                    <div id="admin-courses" class="admin-view" style="display: none;">
+                        <div class="course-management-section">
+                            <div class="section-header">
+                                <h4>Course Management</h4>
+                                <button id="add-course-btn" class="btn-primary">+ Add New Course</button>
+                            </div>
+                            
+                            <!-- Add/Edit Course Form (hidden by default) -->
+                            <div id="course-form-container" style="display: none;">
+                                <h5 id="course-form-title">Add New Course</h5>
+                                <form id="course-form">
+                                    <input type="hidden" id="course-id" name="courseId">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="course-code">Course Code *</label>
+                                            <input type="text" id="course-code" name="courseCode" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="course-title">Course Title *</label>
+                                            <input type="text" id="course-title" name="title" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="course-description">Description</label>
+                                        <textarea id="course-description" name="description" rows="3"></textarea>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="course-price">Price (JMD) *</label>
+                                            <input type="number" id="course-price" name="price" step="0.01" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="course-duration">Duration (Weeks) *</label>
+                                            <input type="number" id="course-duration" name="durationWeeks" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="course-instructor">Instructor *</label>
+                                            <select id="course-instructor" name="instructorId" required>
+                                                <option value="">Select Instructor</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="course-category">Category</label>
+                                            <input type="text" id="course-category" name="category" placeholder="e.g., ISO, Risk Management">
+                                        </div>
+                                    </div>
+                                    <div class="form-actions">
+                                        <button type="submit" class="btn-primary">Save Course</button>
+                                        <button type="button" id="cancel-course-btn" class="btn-secondary">Cancel</button>
+                                    </div>
+                                </form>
+                            </div>
+                            
+                            <!-- Courses List -->
+                            <div id="admin-courses-list" class="courses-table">
+                                <!-- Courses will be populated by JavaScript -->
+                            </div>
                         </div>
                     </div>
                 </div>

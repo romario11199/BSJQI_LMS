@@ -1521,6 +1521,11 @@ footer p {
     background: var(--bg-tertiary);
 }
 
+.courses-table tbody tr.suspended-course {
+    opacity: 0.75;
+    background: #fffbf0;
+}
+
 .status-badge {
     display: inline-block;
     padding: 6px 16px;
@@ -1535,6 +1540,12 @@ footer p {
     background: linear-gradient(135deg, var(--success), #05c79b);
     color: white;
     box-shadow: 0 2px 8px rgba(6, 214, 160, 0.3);
+}
+
+.status-badge.suspended {
+    background: linear-gradient(135deg, var(--warning), #f5c24d);
+    color: var(--dark);
+    box-shadow: 0 2px 8px rgba(255, 209, 102, 0.3);
 }
 
 .status-badge.inactive {
@@ -1563,6 +1574,24 @@ footer p {
     background: var(--primary-dark);
     transform: translateY(-2px);
     box-shadow: var(--shadow-sm);
+}
+
+.btn-small.btn-warning {
+    background: var(--warning);
+    color: var(--dark);
+}
+
+.btn-small.btn-warning:hover {
+    background: #f5c24d;
+}
+
+.btn-small.btn-success {
+    background: var(--success);
+    color: white;
+}
+
+.btn-small.btn-success:hover {
+    background: #05c79b;
 }
 
 .btn-small.btn-danger {

@@ -60,10 +60,23 @@ app.get('/api/courses', async (req, res) => {
     try {
         const pool = db.getPool();
         if (!pool) throw new Error('DB pool not initialized');
+        
+        // Ensure IsSuspended column exists
+        try {
+            await pool.request().query(`
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Courses') AND name = 'IsSuspended')
+                BEGIN
+                    ALTER TABLE Courses ADD IsSuspended BIT DEFAULT 0 NOT NULL
+                END
+            `);
+        } catch (err) {
+            console.log('Column check note:', err.message);
+        }
+        
         const result = await pool.request().query(
             `SELECT CourseCode, Title, Description, Price, DurationWeeks, InstructorName, Category
              FROM Courses
-             WHERE IsActive = 1
+             WHERE IsActive = 1 AND ISNULL(IsSuspended, 0) = 0
              ORDER BY CourseCode`
         );
 
@@ -834,6 +847,72 @@ app.put('/api/admin/courses/:courseId', async (req, res) => {
     }
 });
 
+// Suspend course (Admin only)
+app.put('/api/admin/courses/:courseId/suspend', async (req, res) => {
+    try {
+        const courseId = req.params.courseId;
+
+        const pool = db.getPool();
+        if (!pool) return res.status(500).json({ success: false, message: 'Database not connected' });
+
+        // Check if IsSuspended column exists, if not add it
+        try {
+            await pool.request().query(`
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Courses') AND name = 'IsSuspended')
+                BEGIN
+                    ALTER TABLE Courses ADD IsSuspended BIT DEFAULT 0 NOT NULL
+                END
+            `);
+        } catch (err) {
+            console.log('Column check/creation note:', err.message);
+        }
+
+        // Set IsSuspended to 1 (true)
+        await pool.request()
+            .input('CourseID', sql.Int, courseId)
+            .query(`UPDATE Courses SET IsSuspended = 1 WHERE CourseID = @CourseID`);
+
+        res.json({
+            success: true,
+            message: 'Course suspended successfully'
+        });
+
+    } catch (error) {
+        console.error('Suspend course error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// Unsuspend course (Admin only)
+app.put('/api/admin/courses/:courseId/unsuspend', async (req, res) => {
+    try {
+        const courseId = req.params.courseId;
+
+        const pool = db.getPool();
+        if (!pool) return res.status(500).json({ success: false, message: 'Database not connected' });
+
+        // Set IsSuspended to 0 (false)
+        await pool.request()
+            .input('CourseID', sql.Int, courseId)
+            .query(`UPDATE Courses SET IsSuspended = 0 WHERE CourseID = @CourseID`);
+
+        res.json({
+            success: true,
+            message: 'Course unsuspended successfully'
+        });
+
+    } catch (error) {
+        console.error('Unsuspend course error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
 // Delete course (Admin only - soft delete)
 app.delete('/api/admin/courses/:courseId', async (req, res) => {
     try {
@@ -901,6 +980,18 @@ app.get('/api/admin/courses', async (req, res) => {
         const pool = db.getPool();
         if (!pool) throw new Error('DB pool not initialized');
 
+        // Ensure IsSuspended column exists
+        try {
+            await pool.request().query(`
+                IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Courses') AND name = 'IsSuspended')
+                BEGIN
+                    ALTER TABLE Courses ADD IsSuspended BIT DEFAULT 0 NOT NULL
+                END
+            `);
+        } catch (err) {
+            console.log('Column check note:', err.message);
+        }
+
         const result = await pool.request().query(`
             SELECT 
                 c.CourseID,
@@ -913,13 +1004,14 @@ app.get('/api/admin/courses', async (req, res) => {
                 c.InstructorName,
                 c.Category,
                 c.IsActive,
+                ISNULL(c.IsSuspended, 0) as IsSuspended,
                 COUNT(ce.EnrollmentID) as TotalEnrollments
             FROM Courses c
             LEFT JOIN CourseEnrollments ce ON c.CourseID = ce.CourseID
             GROUP BY 
                 c.CourseID, c.CourseCode, c.Title, c.Description, 
                 c.Price, c.DurationWeeks, c.InstructorID, c.InstructorName, 
-                c.Category, c.IsActive
+                c.Category, c.IsActive, c.IsSuspended
             ORDER BY c.CourseCode
         `);
 
@@ -934,6 +1026,7 @@ app.get('/api/admin/courses', async (req, res) => {
             InstructorName: course.InstructorName,
             Category: course.Category,
             IsActive: course.IsActive,
+            IsSuspended: course.IsSuspended,
             TotalEnrollments: course.TotalEnrollments
         }));
 

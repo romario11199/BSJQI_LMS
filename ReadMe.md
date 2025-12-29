@@ -65,7 +65,9 @@ To improve efficiency, enhance the learner’s experience, and strengthen admini
 
 ## Features
 
-- **User Registration & Login**
+- **Student Registration & Login**
+- **Instructor Login**
+- **Administrator Login**
 - **Course Browsing & Selection**
 - **Payment Processing** (simulated)
 - **Student Dashboard**

@@ -532,12 +532,22 @@ async function handleRegistration(e) {
     
     const formData = new FormData(e.target);
     const fullName = formData.get('fullName').trim();
+    const email = formData.get('email').trim();
+    const password = formData.get('password').trim();
     const parts = fullName.split(/\s+/);
     const firstName = parts[0] || '';
     const lastName = parts.slice(1).join(' ') || '';
     
     if (!firstName) {
         alert('Please enter your full name');
+        return;
+    }
+    
+    // Email verification confirmation popup
+    const confirmVerification = confirm(`A verification code has been sent to:\n\n${email}\n\nPlease check your email and click OK to complete your registration.`);
+    
+    if (!confirmVerification) {
+        alert('Registration cancelled. Please verify your email and try again.');
         return;
     }
     
@@ -548,8 +558,8 @@ async function handleRegistration(e) {
             body: JSON.stringify({
                 firstName: firstName,
                 lastName: lastName,
-                email: formData.get('email'),
-                password: formData.get('password')
+                email: email,
+                password: password
             })
         });
         
@@ -1041,7 +1051,7 @@ async function loadAdminCourses() {
                     </thead>
                     <tbody>
                         ${result.data.map(course => `
-                            <tr class="${!course.IsActive ? 'inactive-course' : ''}">
+                            <tr class="${!course.IsActive ? 'inactive-course' : course.IsSuspended ? 'suspended-course' : ''}">
                                 <td>${course.CourseCode}</td>
                                 <td>${course.Title}</td>
                                 <td>${course.InstructorName}</td>
@@ -1049,15 +1059,19 @@ async function loadAdminCourses() {
                                 <td>${course.DurationWeeks} weeks</td>
                                 <td>${course.TotalEnrollments || 0}</td>
                                 <td>
-                                    <span class="status-badge ${course.IsActive ? 'active' : 'inactive'}">
-                                        ${course.IsActive ? 'Active' : 'Inactive'}
+                                    <span class="status-badge ${!course.IsActive ? 'inactive' : course.IsSuspended ? 'suspended' : 'active'}">
+                                        ${!course.IsActive ? 'Inactive' : course.IsSuspended ? 'Suspended' : 'Active'}
                                     </span>
                                 </td>
                                 <td>
                                     <button class="btn-small edit-course-btn" data-course-id="${course.CourseID}">Edit</button>
-                                    ${course.IsActive ? 
-                                        `<button class="btn-small btn-danger delete-course-btn" data-course-id="${course.CourseID}">Delete</button>` :
-                                        `<span class="text-muted">Deleted</span>`
+                                    ${course.IsActive && !course.IsSuspended ? 
+                                        `<button class="btn-small btn-warning suspend-course-btn" data-course-id="${course.CourseID}">Suspend</button>
+                                        <button class="btn-small btn-danger inactive-course-btn" data-course-id="${course.CourseID}">Inactive</button>` :
+                                        course.IsSuspended ?
+                                        `<button class="btn-small btn-success unsuspend-course-btn" data-course-id="${course.CourseID}">Unsuspend</button>
+                                        <button class="btn-small btn-danger inactive-course-btn" data-course-id="${course.CourseID}">Inactive</button>` :
+                                        `<span class="text-muted">Inactive</span>`
                                     }
                                 </td>
                             </tr>
@@ -1066,7 +1080,7 @@ async function loadAdminCourses() {
                 </table>
             `;
             
-            // Add event listeners to edit and delete buttons
+            // Add event listeners to edit, suspend, unsuspend, and inactive buttons
             document.querySelectorAll('.edit-course-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const courseId = e.target.getAttribute('data-course-id');
@@ -1074,10 +1088,24 @@ async function loadAdminCourses() {
                 });
             });
             
-            document.querySelectorAll('.delete-course-btn').forEach(btn => {
+            document.querySelectorAll('.suspend-course-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const courseId = e.target.getAttribute('data-course-id');
-                    deleteCourse(courseId);
+                    suspendCourse(courseId);
+                });
+            });
+            
+            document.querySelectorAll('.unsuspend-course-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const courseId = e.target.getAttribute('data-course-id');
+                    unsuspendCourse(courseId);
+                });
+            });
+            
+            document.querySelectorAll('.inactive-course-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const courseId = e.target.getAttribute('data-course-id');
+                    inactivateCourse(courseId);
                 });
             });
         } else {
@@ -1182,9 +1210,63 @@ function editCourse(courseId, coursesData) {
     }
 }
 
-// Delete course
-async function deleteCourse(courseId) {
-    if (!confirm('Are you sure you want to delete this course? This action cannot be undone.')) {
+// Suspend course
+async function suspendCourse(courseId) {
+    if (!confirm('Are you sure you want to suspend this course? This will temporarily prevent new enrollments.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/courses/${courseId}/suspend`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('Course suspended successfully!');
+            await loadAdminCourses();
+            await loadAndRenderCourses(); // Refresh public course list
+        } else {
+            alert('Error: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Suspend course error:', error);
+        alert('Failed to suspend course. Please try again.');
+    }
+}
+
+// Unsuspend course
+async function unsuspendCourse(courseId) {
+    if (!confirm('Are you sure you want to unsuspend this course?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/courses/${courseId}/unsuspend`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('Course unsuspended successfully!');
+            await loadAdminCourses();
+            await loadAndRenderCourses(); // Refresh public course list
+        } else {
+            alert('Error: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Unsuspend course error:', error);
+        alert('Failed to unsuspend course. Please try again.');
+    }
+}
+
+// Mark course as inactive
+async function inactivateCourse(courseId) {
+    if (!confirm('Are you sure you want to mark this course as inactive? This action cannot be undone.')) {
         return;
     }
     
@@ -1196,15 +1278,15 @@ async function deleteCourse(courseId) {
         const result = await response.json();
         
         if (result.success) {
-            alert('Course deleted successfully!');
+            alert('Course marked as inactive successfully!');
             await loadAdminCourses();
             await loadAndRenderCourses(); // Refresh public course list
         } else {
             alert('Error: ' + result.message);
         }
     } catch (error) {
-        console.error('Delete course error:', error);
-        alert('Failed to delete course. Please try again.');
+        console.error('Inactive course error:', error);
+        alert('Failed to mark course as inactive. Please try again.');
     }
 }
 
